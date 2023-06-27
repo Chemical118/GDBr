@@ -22,6 +22,7 @@ jobs:
             blast
             p-tqdm
             pyfaidx
+            requests
             vcfpy
             
       - name: Run Test
