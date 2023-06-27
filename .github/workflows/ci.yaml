@@ -16,7 +16,6 @@ jobs:
         with:
           environment-name: test
           create-args: >-
-            -c conda-forge
             -c bioconda
             python=${{ matrix.python-version }}
             biopython
@@ -27,5 +26,5 @@ jobs:
             
       - name: Run Test
         run: |
-          micromamba activate test
+          /home/runner/micromamba-bin/micromamba activate test
           python -m unittest discover -s test
