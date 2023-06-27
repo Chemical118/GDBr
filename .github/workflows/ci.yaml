@@ -32,3 +32,4 @@ jobs:
 
       - name: Upload Coverage to Codecov
         uses: codecov/codecov-action@v2
+          env: CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
