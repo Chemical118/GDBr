@@ -23,11 +23,12 @@ jobs:
             coverage
             p-tqdm
             pyfaidx
+            pytest-cov
             requests
             vcfpy
             
       - name: Run Test
-        run: micromamba activate test | coverage run -m unittest discover ./test/test.py
+        run: micromamba activate test | coverage run -m unittest discover -s test | pytest --cov=./ --cov-report=xml
         shell: bash -el {0}
 
       - name: Upload Coverage to Codecov
