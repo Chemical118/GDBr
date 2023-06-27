@@ -27,7 +27,7 @@ jobs:
             vcfpy
             
       - name: Run Test
-        run: micromamba activate test | coverage run --omit="./test*" -m unittest discover test/test.py
+        run: micromamba activate test | coverage run -m unittest discover ./test/test.py
         shell: bash -el {0}
 
       - name: Upload Coverage to Codecov
