@@ -1,6 +1,6 @@
 from functools import partial
 from pyfaidx import Fasta
-from my_tqdm import p_map
+from gdbr.my_tqdm import p_map
 
 import subprocess
 import shutil
@@ -9,6 +9,12 @@ import csv
 import os
 
 blastn_fmt = ['pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'bitscore']
+
+ref_loc = ''
+qry_loc = ''
+vcf_loc = ''
+dbdir = ''
+qryworkdir = ''
 
 def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom):
     start_temp_seq_loc = os.path.join(qryworkdir, f'ref_start_{sv_id}.fasta')
@@ -67,7 +73,7 @@ def get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result,
     qry_len = qry_end - qry_start + 1
     return ref_start, ref_end, ref_len, qry_start, qry_end, qry_len
 
-def get_correctrd_location(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end):
+def get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end):
     base_ref_start = ref_start
     base_qry_start = qry_start
 
@@ -104,6 +110,7 @@ def get_real_sv(record, sv_find_len=2000):
 
     ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result)
 
+    # remove false substitution
     call_err_try = 3
     while call_err_try > 0 and qry_len < 0 and start_filter_result[0][6] < end_filter_result[0][6] and start_filter_result[0][7] < end_filter_result[0][7]:
         ref_end -= qry_len
@@ -164,7 +171,7 @@ def get_real_sv(record, sv_find_len=2000):
         ref_temp_seq = str(ref_seq[chrom][ref_start - 1:ref_end]).upper()
         qry_temp_seq = str(qry_seq[chrom][qry_start - 1:qry_end]).upper()
 
-        ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_correctrd_location(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end)
+        ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end)
         
     if qry_len < 0:
         sv_name = 'ERR_POS'
@@ -183,56 +190,69 @@ def get_real_sv(record, sv_find_len=2000):
 
     return sv_name, chrom, ref_start, ref_end, qry_start, qry_end    
 
-# working directory setting
-workdir = 'data'
-force = True
+def preprocess_main(ref_loc_, qry_loc_list, vcf_loc_list, workdir='data', force=False, file=True, **pbar_arg):
+    # working directory setting
+    global ref_loc, qry_loc, dbdir, qryworkdir
 
-shutil.rmtree(workdir)
-if not os.path.isdir(workdir):
-    try:
-        os.mkdir(workdir)
-    except OSError as error:
-        raise Exception(str(error))
+    ref_loc = ref_loc_
+    force = True
 
-# read .fasta file
-ref_loc = 'refseq/chm13v2.0.fa'
-ref_seq = Fasta(ref_loc, build_index=True)
+    if len(qry_loc_list) != len(vcf_loc_list):
+        raise Exception('The number of query and variant must be same')
 
-# get 1Mbp chromosome
-ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
+    if not os.path.isdir(workdir):
+        try:
+            os.mkdir(workdir)
+        except OSError as error:
+            raise Exception(str(error))
 
-qry_loc_list = ['qryseq/NA21309.maternal.fa', 'qryseq/NA21309.paternal.fa']
-vcf_loc_list = ['vcfs/NA21309.maternal.vcf', 'vcfs/NA21309.paternal.vcf']
+    # read .fasta file
+    ref_seq = Fasta(ref_loc, build_index=True)
 
-for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
-    qry_seq = Fasta(qry_loc, build_index=True)
+    # get 1Mbp chromosome
+    ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
 
-    # check all ref chromosome in all qry
-    if set(ref_chr_list) > set(qry_seq.records.keys()):
-        raise Exception('Chromone Error')
-    
-    qryworkdir = os.path.join(workdir, str(qry_ind))
-    dbdir = os.path.join(qryworkdir, 'db')
+    output_data = []
+    for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
+        qry_seq = Fasta(qry_loc, build_index=True)
 
-    os.mkdir(qryworkdir)
-    os.mkdir(dbdir)
-
-    # split query .fasta file and makeblastdb per chromosome
-    for chr_name in ref_chr_list:
-        with open(os.path.join(qryworkdir, chr_name + '.fasta'), 'w') as f:
-            tseq = qry_seq[chr_name]
-            f.write('>' + chr_name + '\n')
-            f.write(str(tseq))
+        # check all ref chromosome in all qry
+        if set(ref_chr_list) > set(qry_seq.records.keys()):
+            raise Exception('Chromone Error')
         
-        subprocess.run(['makeblastdb', '-in', os.path.join(qryworkdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(dbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        os.remove(os.path.join(qryworkdir, chr_name + '.fasta'))
+        qryworkdir = os.path.join(workdir, str(qry_ind))
+        dbdir = os.path.join(qryworkdir, 'db')
 
-    vcf_tot_data = [record for record in vcfpy.Reader.from_path(vcf_loc) if record.CHROM in ref_chr_list]
+        os.mkdir(qryworkdir)
+        os.mkdir(dbdir)
 
-    sv_find_len = 2000
-    sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len), vcf_tot_data, num_cpus=15)
-    
-    with open(f'sv_call_{qry_ind}_test.csv', 'w') as f:
-        cf = csv.writer(f)
-        cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
-        cf.writerows([[i] + list(v) for i, v in enumerate(sv_list)])
+        # split query .fasta file and makeblastdb per chromosome
+        for chr_name in ref_chr_list:
+            with open(os.path.join(qryworkdir, chr_name + '.fasta'), 'w') as f:
+                tseq = qry_seq[chr_name]
+                f.write('>' + chr_name + '\n')
+                f.write(str(tseq))
+            
+            subprocess.run(['makeblastdb', '-in', os.path.join(qryworkdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(dbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.remove(os.path.join(qryworkdir, chr_name + '.fasta'))
+
+        vcf_tot_data = []
+        record = vcfpy.Reader.from_path(vcf_loc)
+        for r in record:
+            if r.CHROM in ref_chr_list:
+                vcf_tot_data.append(r)
+        record.close()
+
+        sv_find_len = 2000
+        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len), vcf_tot_data, **pbar_arg)
+        
+        if file:
+            with open(f'sv_call_{qry_ind}.csv', 'w') as f:
+                cf = csv.writer(f)
+                cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
+                cf.writerows([[i] + list(v) for i, v in enumerate(sv_list)])
+        else:
+            output_data.append([[i] + list(v) for i, v in enumerate(sv_list)])
+
+    if not file:
+        return output_data

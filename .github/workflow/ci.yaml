@@ -1,0 +1,25 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Conda with Python ${{ matrix.python-version }}
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-activate-base: true
+          activate-environment: ""
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependency
+        run: conda install -c conda-forge -c bioconda p-tqdm biopython pyfaidx vcfpy
+      
+      - name: Run Test
+        run: python -m unittest discover -s test

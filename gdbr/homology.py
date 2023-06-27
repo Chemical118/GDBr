@@ -1,7 +1,7 @@
 from Bio.Blast import NCBIXML
 from functools import partial
 from pyfaidx import Fasta
-from my_tqdm import p_map
+from gdbr.my_tqdm import p_map
 
 import subprocess
 import csv

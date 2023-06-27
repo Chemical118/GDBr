@@ -5,9 +5,6 @@ import p_tqdm
 import json
 import os
 
-data_loc = 'telegram.json'
-
-
 def get_telegram_data(file_loc):
     os.path
     if os.path.exists(file_loc):
@@ -17,9 +14,9 @@ def get_telegram_data(file_loc):
     else:
         return None
 
-def p_map(f, it, num_cpus=4, pbar=True):
+def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
     if pbar:
-        telegram_data = get_telegram_data(data_loc)
+        telegram_data = get_telegram_data(telegram_token_loc)
         if telegram_data is None:
             return p_tqdm.p_map(f, it, num_cpus=num_cpus)
         else:
