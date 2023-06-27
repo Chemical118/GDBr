@@ -27,7 +27,7 @@ jobs:
             vcfpy
             
       - name: Run Test
-        run: micromamba activate test && coverage run --source=./gdbr --omit="./test/*" -m unittest discover test && coverage xml
+        run: micromamba activate test && coverage run --source=./gdbr --omit=./test/* -m unittest discover test && coverage xml
         shell: bash -el {0}
 
       - name: Upload Coverage to Codecov
