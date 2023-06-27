@@ -19,11 +19,13 @@ jobs:
             -c conda-forge
             -c bioconda
             python=${{ matrix.python-version }}
+            biopython
             blast
             p-tqdm
-            biopython
             pyfaidx
             vcfpy
             
       - name: Run Test
-        run: python -m unittest discover -s test
+        run: |
+        micromamba activate test
+        python -m unittest discover -s test
