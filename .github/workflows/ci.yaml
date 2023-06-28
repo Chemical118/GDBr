@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10']
+        python-version: ['3.9', '3.10', '3.11']
 
     steps:
       - name: Checkout
@@ -25,6 +25,8 @@ jobs:
             pyfaidx
             requests
             vcfpy
+          cache-environment: true
+          cache-downloads: false
             
       - name: Run Test
         run: micromamba activate test && coverage run --source=./gdbr --omit=./test/* -m unittest discover test && coverage xml
