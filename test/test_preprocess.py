@@ -1,9 +1,10 @@
 from unittest import TestCase
 from gdbr.preprocess import preprocess_main, get_correctrd_location_by_idx
 
-class PreprocessTest(TestCase):
-    def test_main_example(self):
-        test_ans = [[0, 'FND_IDX:(0, 1)'],
+import shutil
+
+
+test_ans = [[0, 'FND_IDX:(0, 1)'],
         [1, 'DEL', 'chr12:1-2500000', 95831, 96147, 95496, 95495],
         [2, 'SUB', 'chr12:1-2500000', 96424, 96783, 96129, 96131],
         [3, 'DEL', 'chr12:1-2500000', 123974, 124029, 123332, 123331],
@@ -57,8 +58,14 @@ class PreprocessTest(TestCase):
         [51, 'INS', 'chr12:1-2500000', 2353810, 2353809, 2354444, 2354576],
         [52, 'INS', 'chr12:1-2500000', 2408476, 2408475, 2409260, 2409774]]
 
-        for ans, func_ans in zip(test_ans, preprocess_main('test/example/ref.fa', ['test/example/qry.fa'], ['test/example/variants.vcf'], file=False, pbar=False)[0]):
+class PreprocessTest(TestCase):
+    def test_main_example(self):
+        sv_data = preprocess_main('test/example/ref.fa', ['test/example/qry.fa'], ['test/example/variants.vcf'], file=False, pbar=False)
+        for ans, func_ans in zip(test_ans, sv_data[0]):
             self.assertEqual(ans, func_ans)
+
+        # clean test
+        shutil.rmtree('data')
 
     def test_corrected_index(self):
         self.assertEqual((0, 9, 10, 0, 4, 5), get_correctrd_location_by_idx("ATGCTATGCT", "GCACA", 0, 9, 0, 4))

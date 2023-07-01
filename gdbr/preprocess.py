@@ -3,20 +3,15 @@ from pyfaidx import Fasta
 from gdbr.my_tqdm import p_map
 
 import subprocess
-import shutil
 import vcfpy
 import csv
 import os
 
+#                [0]       [1]        [2]        [3]        [4]      [5]      [6]      [7]       [8]
 blastn_fmt = ['pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'bitscore']
 
-ref_loc = ''
-qry_loc = ''
-vcf_loc = ''
-dbdir = ''
-qryworkdir = ''
 
-def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom):
+def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir):
     start_temp_seq_loc = os.path.join(qryworkdir, f'ref_start_{sv_id}.fasta')
     end_temp_seq_loc = os.path.join(qryworkdir, f'ref_end_{sv_id}.fasta')
 
@@ -42,7 +37,7 @@ def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom):
 
     return start_filter_result, end_filter_result
 
-def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, filter_func):
+def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryworkdir, filter_func):
     ref_temp_seq_loc = os.path.join(qryworkdir, f'sub_ref_{sv_id}.fasta')
     qry_temp_seq_loc = os.path.join(qryworkdir, f'sub_qry_{sv_id}.fasta')
 
@@ -89,7 +84,7 @@ def get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end
     qry_len = qry_end - qry_start + 1
     return ref_start, ref_end, ref_len, qry_start, qry_end, qry_len
 
-def get_real_sv(record, sv_find_len=2000):
+def get_real_sv(record, sv_find_len, ref_loc, qry_loc, dbdir, qryworkdir):
     tid = record.ID[0].split('.')[1:-1][0]
     
     if tid not in {'DEL', 'INS'}:
@@ -103,7 +98,7 @@ def get_real_sv(record, sv_find_len=2000):
     start_temp_seq = ref_seq[chrom][ref_start - sv_find_len - 1:ref_start - 1]
     end_temp_seq = ref_seq[chrom][ref_end:ref_end + sv_find_len]
 
-    start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom)
+    start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir)
     
     if len(start_filter_result) != 1 or len(end_filter_result) != 1:
         return f'FND_IDX:({len(start_filter_result)}, {len(end_filter_result)})',
@@ -119,7 +114,7 @@ def get_real_sv(record, sv_find_len=2000):
         start_temp_seq = ref_seq[chrom][ref_start - sv_find_len - 1:ref_start - 1]
         end_temp_seq = ref_seq[chrom][ref_end:ref_end + sv_find_len]
 
-        start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom)
+        start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir)
         
         if len(start_filter_result) != 1 or len(end_filter_result) != 1:
             return f'FND_IDX:({len(start_filter_result)}, {len(end_filter_result)})',
@@ -138,7 +133,7 @@ def get_real_sv(record, sv_find_len=2000):
         start_ref_temp_seq = ref_seq[chrom][ref_start - sv_find_len - 1:ref_start - 1 + start_ref_check_len]
         start_qry_temp_seq = qry_seq[chrom][qry_start - sv_find_len - 1:qry_start - 1 + start_qry_check_len]
 
-        start_sub_filter_result = get_blast_single_result(start_ref_temp_seq, start_qry_temp_seq, sv_find_len, sv_id, lambda t: t[5] >= sv_find_len and t[7] >= sv_find_len)
+        start_sub_filter_result = get_blast_single_result(start_ref_temp_seq, start_qry_temp_seq, sv_find_len, sv_id, qryworkdir, lambda t: t[5] >= sv_find_len and t[7] >= sv_find_len)
 
         if len(start_sub_filter_result) > 0:
             ref_start += start_sub_filter_result[0][5] - sv_find_len
@@ -157,7 +152,7 @@ def get_real_sv(record, sv_find_len=2000):
         end_ref_temp_seq = ref_seq[chrom][ref_end - end_ref_check_len:ref_end + sv_find_len]
         end_qry_temp_seq = qry_seq[chrom][qry_end - end_qry_check_len:qry_end + sv_find_len]
 
-        end_sub_filter_result = get_blast_single_result(end_ref_temp_seq, end_qry_temp_seq, sv_find_len, sv_id, lambda t: t[4] <= end_ref_check_len + 1 and t[6] <= end_qry_check_len + 1)
+        end_sub_filter_result = get_blast_single_result(end_ref_temp_seq, end_qry_temp_seq, sv_find_len, sv_id, qryworkdir, lambda t: t[4] <= end_ref_check_len + 1 and t[6] <= end_qry_check_len + 1)
 
         if len(end_sub_filter_result) > 0:
             ref_end -= end_ref_check_len + 1 - end_sub_filter_result[0][4]
@@ -190,13 +185,7 @@ def get_real_sv(record, sv_find_len=2000):
 
     return sv_name, chrom, ref_start, ref_end, qry_start, qry_end    
 
-def preprocess_main(ref_loc_, qry_loc_list, vcf_loc_list, workdir='data', force=False, file=True, **pbar_arg):
-    # working directory setting
-    global ref_loc, qry_loc, dbdir, qryworkdir
-
-    ref_loc = ref_loc_
-    force = True
-
+def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', force=False, file=True, **pbar_arg):
     if len(qry_loc_list) != len(vcf_loc_list):
         raise Exception('The number of query and variant must be same')
 
@@ -218,7 +207,7 @@ def preprocess_main(ref_loc_, qry_loc_list, vcf_loc_list, workdir='data', force=
 
         # check all ref chromosome in all qry
         if set(ref_chr_list) > set(qry_seq.records.keys()):
-            raise Exception('Chromone Error')
+            raise Exception('Chromone name must same')
         
         qryworkdir = os.path.join(workdir, str(qry_ind))
         dbdir = os.path.join(qryworkdir, 'db')
@@ -236,15 +225,10 @@ def preprocess_main(ref_loc_, qry_loc_list, vcf_loc_list, workdir='data', force=
             subprocess.run(['makeblastdb', '-in', os.path.join(qryworkdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(dbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             os.remove(os.path.join(qryworkdir, chr_name + '.fasta'))
 
-        vcf_tot_data = []
-        record = vcfpy.Reader.from_path(vcf_loc)
-        for r in record:
-            if r.CHROM in ref_chr_list:
-                vcf_tot_data.append(r)
-        record.close()
-
-        sv_find_len = 2000
-        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len), vcf_tot_data, **pbar_arg)
+        with vcfpy.Reader.from_path(vcf_loc) as tot_record:
+            vcf_tot_data = [record for record in tot_record if record.CHROM in ref_chr_list]
+        
+        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, **pbar_arg)
         
         if file:
             with open(f'sv_call_{qry_ind}.csv', 'w') as f:
