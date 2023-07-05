@@ -37,6 +37,7 @@ def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, db
 
     return start_filter_result, end_filter_result
 
+
 def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryworkdir, filter_func):
     ref_temp_seq_loc = os.path.join(qryworkdir, f'sub_ref_{sv_id}.fasta')
     qry_temp_seq_loc = os.path.join(qryworkdir, f'sub_qry_{sv_id}.fasta')
@@ -58,6 +59,7 @@ def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryw
 
     return sub_filter_result
 
+
 def get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result):
     ref_start -= sv_find_len - start_filter_result[0][5]
     ref_end += end_filter_result[0][4] - 1
@@ -67,6 +69,7 @@ def get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result,
     qry_end = end_filter_result[0][6] - 1
     qry_len = qry_end - qry_start + 1
     return ref_start, ref_end, ref_len, qry_start, qry_end, qry_len
+
 
 def get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end):
     base_ref_start = ref_start
@@ -84,7 +87,8 @@ def get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end
     qry_len = qry_end - qry_start + 1
     return ref_start, ref_end, ref_len, qry_start, qry_end, qry_len
 
-def get_real_sv(record, sv_find_len, ref_loc, qry_loc, dbdir, qryworkdir):
+
+def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000):
     tid = record.ID[0].split('.')[1:-1][0]
     
     if tid not in {'DEL', 'INS'}:
@@ -104,6 +108,20 @@ def get_real_sv(record, sv_find_len, ref_loc, qry_loc, dbdir, qryworkdir):
         return f'FND_IDX:({len(start_filter_result)}, {len(end_filter_result)})',
 
     ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result)
+
+    if qry_len > 1e6 or ref_len > 1e6:
+        sv_find_len *= 2
+
+        start_temp_seq = ref_seq[chrom][ref_start - sv_find_len - 1:ref_start - 1]
+        end_temp_seq = ref_seq[chrom][ref_end:ref_end + sv_find_len]
+
+        start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir)
+    
+        if len(start_filter_result) != 1 or len(end_filter_result) != 1:
+            return f'FND_IDX:({len(start_filter_result)}, {len(end_filter_result)})',
+
+        ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result)
+
 
     # remove false substitution
     call_err_try = 3
@@ -185,6 +203,7 @@ def get_real_sv(record, sv_find_len, ref_loc, qry_loc, dbdir, qryworkdir):
 
     return sv_name, chrom, ref_start, ref_end, qry_start, qry_end    
 
+
 def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', force=False, file=True, **pbar_arg):
     if len(qry_loc_list) != len(vcf_loc_list):
         raise Exception('The number of query and variant must be same')
@@ -211,7 +230,7 @@ def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workd
         
         qryworkdir = os.path.join(workdir, str(qry_ind))
         dbdir = os.path.join(qryworkdir, 'db')
-
+        
         os.mkdir(qryworkdir)
         os.mkdir(dbdir)
 
