@@ -1,5 +1,5 @@
 from pathos.multiprocessing import ProcessPool
-from gdbr.customlib.telegram import tqdm
+from tqdm.contrib.telegram import tqdm
 
 import p_tqdm
 import json
@@ -21,7 +21,7 @@ def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc
         if telegram_data is None:
             return p_tqdm.p_map(f, it, num_cpus=num_cpus)
         else:
-            return p_tqdm.p_map(f, it, num_cpus=num_cpus, tqdm=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc)
+            return p_tqdm.p_map(f, it, num_cpus=num_cpus, tqdm=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'))
     else:
         pool = ProcessPool(num_cpus)
         return pool.map(f, it)

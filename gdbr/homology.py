@@ -447,6 +447,17 @@ def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     # split reference .fasta file and makeblastdb per chromosome
     p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
 
+    # select cpu proper usage
+    suggest_num_cpus = max(1, len(ref_chr_list) // 3)
+
+    if num_cpus <= suggest_num_cpus:
+        hard_num_cpus = num_cpus
+        loop_num_cpus = 1
+    else:
+        cpu_usage_list = [num_cpus % i for i in range(suggest_num_cpus - 1, suggest_num_cpus + 2)]
+        hard_num_cpus = suggest_num_cpus - 1 + cpu_usage_list.index(min(cpu_usage_list))
+        loop_num_cpus = num_cpus // hard_num_cpus
+
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
         qry_seq = Fasta(qry_loc, build_index=True)
 
@@ -469,20 +480,9 @@ def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
             if hom[1] == 'SUB' and hom[2] == 'SUB_HARD':
                 hard_sv_list.append(sv_list[hom[0]])
 
-        # select cpu proper usage
-        suggest_num_cpus = len(ref_chr_list) // 3
-
-        if num_cpus < suggest_num_cpus:
-            hard_num_cpus = num_cpus
-            loop_num_cpus = 1
-        else:
-            cpu_usage_list = [num_cpus % i for i in range(suggest_num_cpus - 1, suggest_num_cpus + 2)]
-            hard_num_cpus = suggest_num_cpus - 1 + cpu_usage_list.index(min(cpu_usage_list))
-            loop_num_cpus = num_cpus // hard_num_cpus
-
         hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
                                       ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline, num_cpus=hard_num_cpus),
-                                      hard_sv_list, pbar=True, num_cpus=loop_num_cpus)
+                                      hard_sv_list, pbar=False, num_cpus=loop_num_cpus)
         
         for hom in hard_hom_list:
             hom_list[hom[0]] = hom
