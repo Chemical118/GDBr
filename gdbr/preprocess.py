@@ -1,8 +1,9 @@
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.my_tqdm import p_map
+from gdbr.toolbox import p_map
 
 import subprocess
+import datetime
 import vcfpy
 import csv
 import os
@@ -204,15 +205,22 @@ def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000):
     return sv_name, chrom, ref_start, ref_end, qry_start, qry_end    
 
 
-def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', force=False, file=True, **pbar_arg):
+def makeblastdb_from_location(chr_name, seq_loc, dbdir):
+    seq = Fasta(seq_loc, build_index=False)
+    with open(os.path.join(dbdir, chr_name + '.fasta'), 'w') as f:
+        tseq = seq[chr_name]
+        f.write('>' + chr_name + '\n')
+        f.write(str(tseq))
+    
+    subprocess.run(['makeblastdb', '-in', os.path.join(dbdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(dbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    os.remove(os.path.join(dbdir, chr_name + '.fasta'))
+
+
+def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', force=False, file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
     if len(qry_loc_list) != len(vcf_loc_list):
         raise Exception('The number of query and variant must be same')
-
-    if not os.path.isdir(workdir):
-        try:
-            os.mkdir(workdir)
-        except OSError as error:
-            raise Exception(str(error))
+    
+    os.makedirs(workdir, exist_ok=True)
 
     # read .fasta file
     ref_seq = Fasta(ref_loc, build_index=True)
@@ -224,38 +232,34 @@ def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workd
     for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
         qry_seq = Fasta(qry_loc, build_index=True)
 
-        # check all ref chromosome in all qry
-        if set(ref_chr_list) > set(qry_seq.records.keys()):
-            raise Exception('Chromone name must same')
+        # If there no same chromosone in query and reference
+        qry_chr_list = list(set(ref_chr_list) & set(qry_seq.records.keys()))
+        if qry_chr_list == []:
+            raise Exception('Chromosone name must same')
         
         qryworkdir = os.path.join(workdir, str(qry_ind))
         dbdir = os.path.join(qryworkdir, 'db')
         
-        os.mkdir(qryworkdir)
-        os.mkdir(dbdir)
+        os.makedirs(dbdir, exist_ok=True)
 
         # split query .fasta file and makeblastdb per chromosome
-        for chr_name in ref_chr_list:
-            with open(os.path.join(qryworkdir, chr_name + '.fasta'), 'w') as f:
-                tseq = qry_seq[chr_name]
-                f.write('>' + chr_name + '\n')
-                f.write(str(tseq))
-            
-            subprocess.run(['makeblastdb', '-in', os.path.join(qryworkdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(dbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            os.remove(os.path.join(qryworkdir, chr_name + '.fasta'))
+        p_map(partial(makeblastdb_from_location, seq_loc=qry_loc, dbdir=dbdir), qry_chr_list, num_cpus=num_cpus, pbar=False)
 
         with vcfpy.Reader.from_path(vcf_loc) as tot_record:
             vcf_tot_data = [record for record in tot_record if record.CHROM in ref_chr_list]
         
-        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, **pbar_arg)
+        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, 
+                        num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'PRE {qry_ind + 1}/{len(qry_loc_list)}')
         
         if file:
-            with open(f'sv_call_{qry_ind}.csv', 'w') as f:
+            with open(os.path.splitext(qry_loc)[0] + '.csv', 'w') as f:
                 cf = csv.writer(f)
                 cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
                 cf.writerows([[i] + list(v) for i, v in enumerate(sv_list)])
         else:
             output_data.append([[i] + list(v) for i, v in enumerate(sv_list)])
+
+        print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {qry_ind + 1} / {len(qry_loc_list)} : {os.path.basename(qry_loc)} preprocess complete')
 
     if not file:
         return output_data

@@ -1,9 +1,14 @@
 from Bio.Blast import NCBIXML
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.my_tqdm import p_map
+from gdbr.toolbox import p_map
+from gdbr.preprocess import makeblastdb_from_location
+
+import multiprocessing as mp
 
 import subprocess
+import itertools
+import datetime
 import csv
 import os
 
@@ -231,49 +236,129 @@ def is_away_from_locus(ref_start, ref_end, tar_start, tar_end, near_seq_kb_basel
         return dis > near_seq_kb_baseline * 1e3
 
 
-def get_non_homology_insertion_loaction(tar_seq, near_seq_kb_baseline, refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list):
+def _multiprocessing_find_insertion_chrom(chr_name, near_seq_kb_baseline, refdbdir, len_tar_seq, tar_seq_loc, chrom, ref_start, ref_end):
+    with lock:
+        if global_num_blast_result.value > 1:
+            return []
+    
+    blast_result = subprocess.run(['blastn', '-db', os.path.join(refdbdir, chr_name), '-query', tar_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
+    blast_result_list =  [] if blast_result.stdout == '' else map(blast_output_to_list, blast_result.stdout[:-1].split('\n'))
+    blast_filter_result = list(filter(lambda t: t[1] > len_tar_seq * 0.95, blast_result_list)) if chr_name != chrom else \
+                            list(filter(lambda t: t[1] > len_tar_seq * 0.95 and is_away_from_locus(ref_start, ref_end, t[6], t[7], near_seq_kb_baseline), blast_result_list))
+    
+    with lock:
+        global_num_blast_result.value += len(blast_filter_result)
+        if global_num_blast_result.value > 1:
+            return []
+
+    if len(blast_filter_result) == 1:
+        return blast_filter_result[0][9], blast_filter_result[0][6], blast_filter_result[0][7]
+    else:
+        return []
+
+
+def _multiprocessing_init(_num_blast_result, _lock):
+    global global_num_blast_result, lock
+    global_num_blast_result = _num_blast_result
+    lock = _lock
+
+
+def get_non_homology_insertion_loaction(tar_seq, near_seq_kb_baseline, refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus):
+    len_tar_seq = len(tar_seq)
     tar_seq_loc = os.path.join(qryworkdir, f'nh_dsbr_{sv_id}.fasta')
     with open(tar_seq_loc, 'w') as f:
         f.write('>' + tar_seq.fancy_name + '\n')
         f.write(str(tar_seq))
 
-    num_blast_result = 0
+    lock = mp.Lock()
+    num_blast_result = mp.Value('i', 0)
     ins_chrom = False
     ins_start = ins_end = -1
 
-    # other chromosome-based DSBR
-    for chr_name in ref_chr_list:
-        if chr_name != chrom:
-            blast_result = subprocess.run(['blastn', '-db', os.path.join(refdbdir, chr_name), '-query', tar_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
-            blast_result_list =  [] if blast_result.stdout == '' else map(blast_output_to_list, blast_result.stdout[:-1].split('\n'))
-            blast_filter_result = list(filter(lambda t: t[1] > len(tar_seq) * 0.95, blast_result_list))
-
-            num_blast_result += len(blast_filter_result)
-            if num_blast_result > 1:
-                break
-
-            if len(blast_filter_result) == 1:
-                blast_filter_result = blast_filter_result[0]
-                ins_chrom, ins_start, ins_end = blast_filter_result[9], blast_filter_result[6], blast_filter_result[7]
+    with mp.Pool(initializer=_multiprocessing_init, initargs=(num_blast_result, lock), processes=num_cpus) as p:
+        blast_total_result = p.map(partial(_multiprocessing_find_insertion_chrom, near_seq_kb_baseline=near_seq_kb_baseline, refdbdir=refdbdir,
+                                           len_tar_seq=len_tar_seq, tar_seq_loc=tar_seq_loc, chrom=chrom, ref_start=ref_start, ref_end=ref_end), ref_chr_list)
     
-    # same chromosome-based non-homoology DSBR
-    blast_result = subprocess.run(['blastn', '-db', os.path.join(refdbdir, chrom), '-query', tar_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
-    blast_result_list =  [] if blast_result.stdout == '' else map(blast_output_to_list, blast_result.stdout[:-1].split('\n'))
-    blast_filter_result = list(filter(lambda t: t[1] > len(tar_seq) * 0.95 and is_away_from_locus(ref_start, ref_end, t[6], t[7], near_seq_kb_baseline), blast_result_list))
-
-    num_blast_result += len(blast_filter_result)
-    if len(blast_filter_result) == 1:
-        blast_filter_result = blast_filter_result[0]
-        ins_chrom, ins_start, ins_end = blast_filter_result[9], blast_filter_result[6], blast_filter_result[7]
-
-    if num_blast_result != 1:
-        ins_chrom = num_blast_result
-
     os.remove(tar_seq_loc)
+
+    if num_blast_result.value != 1:
+        ins_chrom = num_blast_result.value
+    else:
+        ins_chrom, ins_start, ins_end = tuple(itertools.chain.from_iterable(blast_total_result))
+
     return ins_chrom, ins_start, ins_end
 
 
-def get_homology(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0):
+def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_list, num_cpus, hom_find_len=2000, near_seq_kb_baseline=100.0):
+    sv_id, tid, chrom, ref_start, ref_end, qry_start, qry_end = sv_data
+
+    dsb_repair_type = 'NO_DSBR'
+    dsb_repair_type_code = 0
+
+    ref_seq = Fasta(ref_loc, build_index=False)
+    qry_seq = Fasta(qry_loc, build_index=False)
+
+    ref_len = ref_end - ref_start + 1
+    qry_len = qry_end - qry_start + 1
+
+    ref_ins_chrom, ref_ins_start, ref_ins_end = get_non_homology_insertion_loaction(ref_seq[chrom][ref_start - 1:ref_end], near_seq_kb_baseline,
+                                                                                    refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
+        
+    qry_ins_chrom, qry_ins_start, qry_ins_end = get_non_homology_insertion_loaction(qry_seq[chrom][qry_start - 1:qry_end], near_seq_kb_baseline,
+                                                                                    refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
+    is_find_ins_ref = isinstance(ref_ins_chrom, str)
+    is_find_ins_qry = isinstance(qry_ins_chrom, str)
+
+    if is_find_ins_ref or is_find_ins_qry:
+        ref_ins_lef_hom = ref_ins_rht_hom = qry_ins_lef_hom = qry_ins_rht_hom = -1
+
+        if is_find_ins_ref:
+            ref_ins_len = ref_ins_end - ref_ins_start + 1                    
+            ref_ins_lef_hom = get_one_way_homology(ref_seq[chrom][ref_start - 1 - hom_find_len:ref_end].reverse,
+                                                    ref_seq[ref_ins_chrom][ref_ins_start - 1 - hom_find_len:ref_ins_end].reverse,
+                                                    ref_len, ref_ins_len, sv_id, hom_find_len, qryworkdir)
+            
+            ref_ins_rht_hom = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len],
+                                                    ref_seq[ref_ins_chrom][ref_ins_start - 1:ref_ins_end + hom_find_len],
+                                                    ref_len, ref_ins_len, sv_id, hom_find_len, qryworkdir)
+
+        if is_find_ins_qry:
+            qry_ins_len = qry_ins_end - qry_ins_start + 1 
+            qry_ins_lef_hom = get_one_way_homology(qry_seq[chrom][qry_start - 1 - hom_find_len:qry_end].reverse,
+                                                    ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
+                                                    qry_len, qry_ins_len, sv_id, hom_find_len, qryworkdir)
+            
+            qry_ins_rht_hom = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len],
+                                                    ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
+                                                    qry_len, qry_ins_len, sv_id, hom_find_len, qryworkdir)
+        
+        dsb_repair_type_code = 3
+        ins_chrom, ins_start, ins_end, lef_hom, rht_hom = (ref_ins_chrom, ref_ins_start, ref_ins_end, ref_ins_lef_hom, ref_ins_rht_hom) \
+                                                            if ref_ins_lef_hom + ref_ins_rht_hom + (ref_len > qry_len) - 0.5 > qry_ins_lef_hom + qry_ins_rht_hom else \
+                                                            (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom)
+        if lef_hom == 0 and rht_hom == 0:
+            dsb_repair_type = 'SUB_UNIQUE'
+        else:
+            dsb_repair_type = 'SAME_CHROM_NH_DSBR' if chrom == ins_chrom else 'NH_DSBR'
+
+    else:
+        ins_chrom = ref_ins_chrom if ref_len > qry_len else qry_ins_chrom
+        
+        if ins_chrom:
+            dsb_repair_type = 'SUB_REPEAT'
+        else:
+            dsb_repair_type = 'SUB_UNKNOWN'
+
+
+    if dsb_repair_type_code == 3:
+        return sv_id, tid, dsb_repair_type, lef_hom, rht_hom, ins_chrom, ins_start, ins_end
+
+    else:
+        return sv_id, tid, dsb_repair_type
+
+
+
+def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3):
     if sv_data[1] not in {'DEL', 'INS', 'SUB'}:
         return sv_data[0], 'UNSUP_ID'
 
@@ -307,53 +392,7 @@ def get_homology(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_list, 
             lef_hom, rht_hom = (ref_lef_hom, ref_rht_hom) if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom)
 
         else:
-            ref_ins_chrom, ref_ins_start, ref_ins_end = get_non_homology_insertion_loaction(ref_seq[chrom][ref_start - 1:ref_end], near_seq_kb_baseline,
-                                                                                            refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list)
-            
-            qry_ins_chrom, qry_ins_start, qry_ins_end = get_non_homology_insertion_loaction(qry_seq[chrom][qry_start - 1:qry_end], near_seq_kb_baseline,
-                                                                                            refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list)
-            is_find_ins_ref = isinstance(ref_ins_chrom, str)
-            is_find_ins_qry = isinstance(qry_ins_chrom, str)
-
-            if is_find_ins_ref or is_find_ins_qry:
-                ref_ins_lef_hom = ref_ins_rht_hom = qry_ins_lef_hom = qry_ins_rht_hom = -1
-
-                if is_find_ins_ref:
-                    ref_ins_len = ref_ins_end - ref_ins_start + 1                    
-                    ref_ins_lef_hom = get_one_way_homology(ref_seq[chrom][ref_start - 1 - hom_find_len:ref_end].reverse,
-                                                           ref_seq[ref_ins_chrom][ref_ins_start - 1 - hom_find_len:ref_ins_end].reverse,
-                                                           ref_len, ref_ins_len, sv_id, hom_find_len, qryworkdir)
-                    
-                    ref_ins_rht_hom = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len],
-                                                           ref_seq[ref_ins_chrom][ref_ins_start - 1:ref_ins_end + hom_find_len],
-                                                           ref_len, ref_ins_len, sv_id, hom_find_len, qryworkdir)
-
-                if is_find_ins_qry:
-                    qry_ins_len = qry_ins_end - qry_ins_start + 1 
-                    qry_ins_lef_hom = get_one_way_homology(qry_seq[chrom][qry_start - 1 - hom_find_len:qry_end].reverse,
-                                                           ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
-                                                           qry_len, qry_ins_len, sv_id, hom_find_len, qryworkdir)
-                    
-                    qry_ins_rht_hom = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len],
-                                                           ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
-                                                           qry_len, qry_ins_len, sv_id, hom_find_len, qryworkdir)
-                
-                dsb_repair_type_code = 3
-                ins_chrom, ins_start, ins_end, lef_hom, rht_hom = (ref_ins_chrom, ref_ins_start, ref_ins_end, ref_ins_lef_hom, ref_ins_rht_hom) \
-                                                                  if ref_ins_lef_hom + ref_ins_rht_hom + (ref_len > qry_len) - 0.5 > qry_ins_lef_hom + qry_ins_rht_hom else \
-                                                                  (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom)
-                if lef_hom == 0 and rht_hom == 0:
-                    dsb_repair_type = 'SUB_UNIQUE'
-                else:
-                    dsb_repair_type = 'SAME_CHROM_NH_DSBR' if chrom == ins_chrom else 'NH_DSBR'
-
-            else:
-                ins_chrom = ref_ins_chrom if ref_len > qry_len else qry_ins_chrom
-                
-                if ins_chrom:
-                    dsb_repair_type = 'SUB_REPEAT'
-                else:
-                    dsb_repair_type = 'SUB_UNKNOWN'
+            dsb_repair_type = 'SUB_HARD'
 
     else:
         lef_hom = rht_hom = 0
@@ -389,14 +428,11 @@ def get_homology(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_list, 
     elif dsb_repair_type_code == 2:
         return sv_id, tid, dsb_repair_type, lef_hom, rht_hom
 
-    elif dsb_repair_type_code == 3:
-        return sv_id, tid, dsb_repair_type, lef_hom, rht_hom, ins_chrom, ins_start, ins_end
-
     else:
         return sv_id, tid, dsb_repair_type
 
 
-def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3,  near_seq_kb_baseline=100, workdir='data', force=False, file=True, **pbar_arg):
+def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3,  near_seq_kb_baseline=100.0, workdir='data', force=False, file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
     # read .fasta file
     ref_seq = Fasta(ref_loc, build_index=True)
     
@@ -407,32 +443,50 @@ def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
 
     refdbdir = os.path.join(workdir, 'db')
-    os.mkdir(refdbdir)
+    os.makedirs(refdbdir, exist_ok=True)
     # split reference .fasta file and makeblastdb per chromosome
-    for chr_name in ref_chr_list:
-        with open(os.path.join(refdbdir, chr_name + '.fasta'), 'w') as f:
-            tseq = ref_seq[chr_name]
-            f.write('>' + chr_name + '\n')
-            f.write(str(tseq))
-
-        subprocess.run(['makeblastdb', '-in', os.path.join(refdbdir, chr_name + '.fasta'), '-input_type', 'fasta', '-dbtype', 'nucl', '-out', os.path.join(refdbdir, chr_name)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        os.remove(os.path.join(refdbdir, chr_name + '.fasta'))
+    p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
 
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
         qry_seq = Fasta(qry_loc, build_index=True)
 
-        # check all ref chromosome in all qry
-        if set(ref_chr_list) > set(qry_seq.records.keys()):
-            raise Exception('Chromone name must same')
+        # If there no same chromosone in query and reference
+        qry_chr_list = list(set(ref_chr_list) & set(qry_seq.records.keys()))
+        if qry_chr_list == []:
+            raise Exception('Chromosone name must same')
         
         qryworkdir = os.path.join(workdir, str(qry_ind))
 
         sv_list = get_sv_list(sv_loc)
-        hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, refdbdir=refdbdir, qryworkdir=qryworkdir,
-                                 ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
-                                 near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline),
-                        sv_list, **pbar_arg)
+        hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir,
+                                 hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
+                                 near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
+                                 sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'HOM {qry_ind + 1}/{len(qry_loc_list)}')
         
+        # check SV to analysis hard mode
+        hard_sv_list = []
+        for hom in hom_list:
+            if hom[1] == 'SUB' and hom[2] == 'SUB_HARD':
+                hard_sv_list.append(sv_list[hom[0]])
+
+        # select cpu proper usage
+        suggest_num_cpus = len(ref_chr_list) // 3
+
+        if num_cpus < suggest_num_cpus:
+            hard_num_cpus = num_cpus
+            loop_num_cpus = 1
+        else:
+            cpu_usage_list = [num_cpus % i for i in range(suggest_num_cpus - 1, suggest_num_cpus + 2)]
+            hard_num_cpus = suggest_num_cpus - 1 + cpu_usage_list.index(min(cpu_usage_list))
+            loop_num_cpus = num_cpus // hard_num_cpus
+
+        hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
+                                      ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline, num_cpus=hard_num_cpus),
+                                      hard_sv_list, pbar=True, num_cpus=loop_num_cpus)
+        
+        for hom in hard_hom_list:
+            hom_list[hom[0]] = hom
+
         output_data = []
         if file:
             with open(f'hum_hom_{qry_ind}.csv', 'w') as f:
@@ -441,6 +495,8 @@ def homology_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
                 cf.writerows(hom_list)
         else:
             output_data.append(hom_list)
+        
+        print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {qry_ind + 1} / {len(qry_loc_list)} : {os.path.basename(qry_loc)} homology complete')
     
     if not file:
         return output_data
