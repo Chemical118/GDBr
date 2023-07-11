@@ -1,6 +1,8 @@
 from unittest import TestCase
-from gdbr.preprocess import preprocess_main, get_correctrd_location_by_idx
+from gdbr.analysis import analysis_main
 
+import os
+import csv
 import shutil
 
 
@@ -58,17 +60,20 @@ test_ans = [[0, 'FND_IDX:(0, 1)'],
         [51, 'INS', 'chr12:1-2500000', 2353810, 2353809, 2354444, 2354576],
         [52, 'INS', 'chr12:1-2500000', 2408476, 2408475, 2409260, 2409774]]
 
-class PreprocessTest(TestCase):
-    def test_main_example(self):
-        sv_data = preprocess_main('test/example/ref.fa', ['test/example/qry.fa'], ['test/example/variants.vcf'], file=False, pbar=False)
-        for ans, func_ans in zip(test_ans, sv_data[0]):
-            self.assertEqual(ans, func_ans)
+class HomologyTest(TestCase):
+    def test_main_example_run(self):
+        sv_loc = 'test/sv_call_0.csv'
+        with open(sv_loc, 'w') as f:
+            cf = csv.writer(f)
+            cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
+            cf.writerows(test_ans)
+
+        os.mkdir('data_')
+        os.mkdir('data_/0')
+        analysis_main('test/example/ref.fa', ['test/example/qry.fa'], [sv_loc], workdir='data_', pbar=False, file=False)
 
         # clean test
-        shutil.rmtree('data')
+        os.remove(sv_loc)
+        shutil.rmtree('data_')
 
-    def test_corrected_index(self):
-        self.assertEqual((0, 9, 10, 0, 4, 5), get_correctrd_location_by_idx("ATGCTATGCT", "GCACA", 0, 9, 0, 4))
-        self.assertEqual((2, 9, 8, 2 ,4, 3), get_correctrd_location_by_idx("GCGCTATGCT", "GCACA", 0, 9, 0, 4))
-        self.assertEqual((0, 7, 8, 0 ,2, 3), get_correctrd_location_by_idx("ATGCTATGCA", "GCACA", 0, 9, 0, 4))
-        self.assertEqual((3, 7, 5, 3 ,2, 0), get_correctrd_location_by_idx("GCATTATGCA", "GCACA", 0, 9, 0, 4))
+

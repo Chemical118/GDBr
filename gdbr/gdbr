@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+import sys
+
+from gdbr.utilities import gdbr_parser, logprint, get_version
+from gdbr.prerprocess import preprocess_main
+from gdbr.correct import correct_main
+from gdbr.analysis import analysis_main
+
+
+def main():
+    arg = gdbr_parser().parse_args()
+
+    logprint(f'Version : GDBr v{get_version()}')
+    logprint(f'Command : gdbr {" ".join(sys.argv[1:])}')
+
+    pbar = not arg.silent
+    if arg.command == 'preprocess':
+        preprocess_main(arg.reference, arg.query, qry_save=arg.query_save, var_save=arg.vcf_save, num_cpus=arg.threads,
+                        workdir=arg.workdir, min_sv_size=arg.min_sv_size, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+    
+    elif arg.command == 'correct':
+        correct_main(arg.reference, arg.query, arg.vcf, sv_save=arg.sv_save, num_cpus=arg.threads,
+                     sv_find_len=arg.sv_find_len, workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+
+    elif arg.command == 'analysis':
+        analysis_main(arg.reference, arg.query, arg.sv_csv, dsbr_save=arg.dsbr_save, num_cpus=arg.threads,
+                      hom_find_len=arg.hom_find_len, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
+                      user_gap_baseline=arg.temp_gap_baseline, near_seq_kb_baseline=arg.near_sv_kb_baseline, diff_locus_hom_baseline=arg.diff_locus_hom_baseline,
+                      workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+    
+    logprint(f'GDBr {arg.command} complete. Have a good day :)')
+
+if __name__ == '__main__':
+    main()

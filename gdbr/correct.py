@@ -1,9 +1,8 @@
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.toolbox import p_map
+from gdbr.utilities import p_map, logprint
 
 import subprocess
-import datetime
 import vcfpy
 import csv
 import os
@@ -216,11 +215,17 @@ def makeblastdb_from_location(chr_name, seq_loc, dbdir):
     os.remove(os.path.join(dbdir, chr_name + '.fasta'))
 
 
-def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', force=False, file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
+def correct_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir='data', sv_save='sv', file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
+    qry_basename_list = list(map(os.path.basename, qry_loc_list))
+
+    if len(qry_basename_list) != len(set(qry_basename_list)):
+        raise Exception('Query basename must be diffrent')
+    
     if len(qry_loc_list) != len(vcf_loc_list):
         raise Exception('The number of query and variant must be same')
     
     os.makedirs(workdir, exist_ok=True)
+    os.makedirs(sv_save, exist_ok=True)
 
     # read .fasta file
     ref_seq = Fasta(ref_loc, build_index=True)
@@ -228,6 +233,7 @@ def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workd
     # get 1Mbp chromosome
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
 
+    logprint(f'Task start : {len(vcf_loc_list)} query detected')
     output_data = []
     for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
         qry_seq = Fasta(qry_loc, build_index=True)
@@ -249,17 +255,18 @@ def preprocess_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workd
             vcf_tot_data = [record for record in tot_record if record.CHROM in ref_chr_list]
         
         sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, 
-                        num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'PRE {qry_ind + 1}/{len(qry_loc_list)}')
+                        num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'COR {qry_ind + 1}/{len(qry_loc_list)}')
         
         if file:
-            with open(os.path.splitext(qry_loc)[0] + '.csv', 'w') as f:
+            qry_basename = os.path.basename(qry_loc)
+            with open(os.path.join(sv_save, qry_basename) + '.SV.csv', 'w') as f:
                 cf = csv.writer(f)
-                cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
+                cf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
                 cf.writerows([[i] + list(v) for i, v in enumerate(sv_list)])
         else:
             output_data.append([[i] + list(v) for i, v in enumerate(sv_list)])
 
-        print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {qry_ind + 1} / {len(qry_loc_list)} : {os.path.basename(qry_loc)} preprocess complete')
+        logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} correction complete')
 
     if not file:
         return output_data
