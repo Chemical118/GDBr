@@ -11,7 +11,7 @@ You need only reference sequence and query sequences file to use `GDBr`.
 ### Install
 We strongly recommend using `conda` package manager to install `GDBr`
 ```sh
-conda install -c chemical118 gdbr
+conda install -c bioconda -c chemical118 -c conda-forge gdbr
 ```
 
 ### Preprocess
