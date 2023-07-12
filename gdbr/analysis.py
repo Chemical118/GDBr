@@ -308,6 +308,7 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
         
     qry_ins_chrom, qry_ins_start, qry_ins_end = get_non_homology_insertion_loaction(qry_seq[chrom][qry_start - 1:qry_end], near_seq_kb_baseline,
                                                                                     refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
+    
     is_find_ins_ref = isinstance(ref_ins_chrom, str)
     is_find_ins_qry = isinstance(qry_ins_chrom, str)
 
@@ -327,11 +328,11 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
         if is_find_ins_qry:
             qry_ins_len = qry_ins_end - qry_ins_start + 1 
             qry_ins_lef_hom = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end].reverse,
-                                                   ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
+                                                   ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
                                                    qry_len, qry_ins_len, sv_id, qryworkdir)
             
             qry_ins_rht_hom = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len],
-                                                   ref_seq[ref_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
+                                                   ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
                                                    qry_len, qry_ins_len, sv_id, qryworkdir)
         
         dsb_repair_type_code = 3
@@ -495,7 +496,8 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
                                       diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
                                       hard_sv_list, pbar=False, num_cpus=loop_num_cpus)
         
-        for hom in hard_hom_list:
+        for h, hom in zip(hom_list, hard_hom_list):
+            print(h[0], hom)
             hom_list[hom[0]] = hom
 
         output_data = []
