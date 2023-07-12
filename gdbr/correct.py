@@ -259,7 +259,7 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, sv_find_len=2000, workdir=
         
         if file:
             qry_basename = os.path.basename(qry_loc)
-            with open(os.path.join(sv_save, qry_basename) + '.SV.csv', 'w') as f:
+            with open(os.path.join(sv_save, qry_basename) + '.COR.csv', 'w') as f:
                 cf = csv.writer(f)
                 cf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
                 cf.writerows([[i] + list(v) for i, v in enumerate(sv_list)])

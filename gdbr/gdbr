@@ -17,7 +17,7 @@ def main():
     pbar = not arg.silent
     if arg.command == 'preprocess':
         preprocess_main(arg.reference, arg.query, qry_save=arg.query_save, var_save=arg.vcf_save, num_cpus=arg.threads,
-                        workdir=arg.workdir, min_sv_size=arg.min_sv_size, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+                        workdir=arg.workdir, min_sv_size=arg.min_sv_size, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, low_memory=arg.low_memory)
     
     elif arg.command == 'correct':
         correct_main(arg.reference, arg.query, arg.vcf, sv_save=arg.sv_save, num_cpus=arg.threads,

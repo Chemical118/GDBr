@@ -1,7 +1,7 @@
 from Bio.Blast import NCBIXML
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.utilities import p_map, logprint
+from gdbr.utilities import p_map, logprint, get_proper_thread
 from gdbr.correct import makeblastdb_from_location
 
 import multiprocessing as mp
@@ -457,15 +457,7 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
 
     # select cpu proper usage
-    suggest_num_cpus = max(1, len(ref_chr_list) // 2)
-
-    if num_cpus <= suggest_num_cpus:
-        hard_num_cpus = num_cpus
-        loop_num_cpus = 1
-    else:
-        cpu_usage_list = [num_cpus % i for i in range(suggest_num_cpus - 1, suggest_num_cpus + 2)]
-        hard_num_cpus = suggest_num_cpus - 1 + cpu_usage_list.index(min(cpu_usage_list))
-        loop_num_cpus = num_cpus // hard_num_cpus
+    hard_num_cpus, loop_num_cpus = get_proper_thread(len(ref_chr_list) // 2, num_cpus)
 
     logprint(f'Task start : {len(sv_loc_list)} SV detected')
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
@@ -483,7 +475,7 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
         hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir,
                                  hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
                                  near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
-                                 sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'HOM {qry_ind + 1}/{len(qry_loc_list)}')
+                                 sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANL {qry_ind + 1}/{len(qry_loc_list)}')
         
         # check SV to analysis hard mode
         hard_sv_list = []
@@ -500,14 +492,21 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
             hom_list[hom[0]] = hom
 
         output_data = []
+        for sv, hom in zip(sv_list, hom_list):
+            sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
+            if len(sv) == 7:
+                output_data.append(sv + list(hom)[2:])
+            else:
+                output_data.append(sv)
+
         if file:
             qry_basename = os.path.basename(qry_loc)
-            with open(os.path.join(dsbr_save, qry_basename) + '.DSBR.tsv', 'w') as f:
+            with open(os.path.join(dsbr_save, qry_basename) + '.ANL.tsv', 'w') as f:
                 tf = csv.writer(f, delimiter='\t')
                 tf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START', 'HOM_END', 'DSBR_CHR', 'DSBR_START', 'DSBR_END'))
-                tf.writerows([sv + list(hom)[2:] if len(sv) == 7 else sv for sv, hom in zip(sv_list, hom_list)])
+                tf.writerows(output_data)
         else:
-            output_data.append(hom_list)
+            output_data.append(output_data)
         
         logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} analysis complete')
     

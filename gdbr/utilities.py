@@ -21,6 +21,23 @@ def get_telegram_data(file_loc):
         return None
 
 
+def get_proper_thread(suggest_num_cpus, num_cpus, num_works=-1):
+    suggest_num_cpus = max(1, suggest_num_cpus)
+
+    if num_cpus <= suggest_num_cpus:
+        hard_num_cpus = num_cpus
+        loop_num_cpus = 1
+    elif num_cpus // num_works >= suggest_num_cpus:
+        hard_num_cpus = num_cpus // num_works
+        loop_num_cpus = num_works
+    else:
+        cpu_usage_list = [num_cpus % i for i in range(suggest_num_cpus - 1, suggest_num_cpus + 2)]
+        hard_num_cpus = suggest_num_cpus - 1 + cpu_usage_list.index(min(cpu_usage_list))
+        loop_num_cpus = num_cpus // hard_num_cpus
+
+    return hard_num_cpus, loop_num_cpus
+
+
 def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc=''):
     if pbar:
         telegram_data = get_telegram_data(telegram_token_loc)
@@ -85,6 +102,10 @@ def gdbr_parser():
                                type=int,
                                default=1,
                                help='number of threads')
+    
+    op_parser_pre.add_argument('--low_memory',
+                               action='store_true',
+                               help='turn off query multiprocessing and reduce memory usage')
     
     op_parser_pre.add_argument('--workdir',
                                type=os.path.abspath,

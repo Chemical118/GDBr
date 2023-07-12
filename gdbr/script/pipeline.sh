@@ -13,7 +13,7 @@ echo "<$name genome preprocess>"
 
 ragtag.py scaffold -t $core -u -C -o $ragtag_save $ref $pan
 
-pre_panfa="$qry_save/$name.fa"
+pre_panfa="$qry_save/$name.PRE.fa"
 faidx -e "lambda t: t.replace('_RagTag', '')" -g "[^Chr0]" "$ragtag_save/ragtag.scaffold.fasta" -o $pre_panfa
 
 
@@ -22,4 +22,4 @@ samtools sort -m4G -@ $core -o "$svim_asm_save/$name.sorted.bam" "$svim_asm_save
 samtools index "$svim_asm_save/$name.sorted.bam"
 svim-asm haploid $svim_asm_save "$svim_asm_save/$name.sorted.bam" $ref --min_sv_size $var_min_size --tandem_duplications_as_insertions --interspersed_duplications_as_insertions
 
-cp "$svim_asm_save/variants.vcf" "$var_save/$name.vcf"
+cp "$svim_asm_save/variants.vcf" "$var_save/$name.PRE.vcf"
