@@ -21,7 +21,8 @@ jobs:
             biopython
             blast
             coverage
-            p-tqdm>=4.46.0
+            tqdm>=4.46.0
+            p-tqdm
             pyfaidx
             requests
             vcfpy
