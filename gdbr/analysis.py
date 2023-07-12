@@ -499,6 +499,8 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
             else:
                 output_data.append(sv)
 
+        logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} analysis complete')
+        
         if file:
             qry_basename = os.path.basename(qry_loc)
             with open(os.path.join(dsbr_save, qry_basename) + '.ANL.tsv', 'w') as f:
@@ -506,9 +508,4 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
                 tf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START', 'HOM_END', 'DSBR_CHR', 'DSBR_START', 'DSBR_END'))
                 tf.writerows(output_data)
         else:
-            output_data.append(output_data)
-        
-        logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} analysis complete')
-    
-    if not file:
-        return output_data
+            return output_data
