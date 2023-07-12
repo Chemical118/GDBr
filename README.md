@@ -9,19 +9,19 @@ GDBr : Genome identification tool for Double-strand Break Repair
 You need only reference sequence and query sequences file to use `GDBr`.
 
 ### Install
-We strongly recommend using [`conda`](https://docs.conda.io/en/latest/) package manager to install `GDBr`
+We strongly recommend using `conda` package manager to install `GDBr`
 ```sh
 conda install -c chemical118 gdbr
 ```
 
 ### Preprocess
-By using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm), `GDBr` preprocess data and return properly scaffolded query `.fa` sequence file and variant `.vcf` file.
+By using `RagTag` and `svim-asm`, `GDBr` preprocess data and return properly scaffolded query `.fa` sequence file and variant `.vcf` file.
 ```sh
 gdbr preprocess -r <reference> -q <query1 query2 ...> --query_save query --vcf_save vcf -t <threads>
 ```
 > Preprocess step needs lots of memory, turn on `--low_memory` if you run out of memory
 ### Correct
-By using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi), `GDBr` correct the variant file to analysis DSBR accurately.
+By using `BLAST`, `GDBr` correct the variant file to analysis DSBR accurately.
 ```sh
 gdbr correct -r <reference> -q query/*.PRE.fa -v vcf/*.PRE.vcf -o sv -t <threads>
 ```
