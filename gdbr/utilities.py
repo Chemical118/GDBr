@@ -1,16 +1,12 @@
 from pathos.multiprocessing import ProcessPool
 from tqdm.contrib.telegram import tqdm
-from glob import glob
+from gdbr.version import get_version
 
 import argparse
 import datetime
 import p_tqdm
 import json
 import os
-
-
-def get_version():
-    return '0.0.1'
 
 
 def get_telegram_data(file_loc):

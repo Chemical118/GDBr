@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import sys
 
-from gdbr.utilities import gdbr_parser, logprint, get_version
+from gdbr.version import get_version
+from gdbr.utilities import gdbr_parser, logprint
 from gdbr.prerprocess import preprocess_main
 from gdbr.correct import correct_main
 from gdbr.analysis import analysis_main

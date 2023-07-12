@@ -1,5 +1,5 @@
 from setuptools import setup
-from gdbr.utilities import get_version
+from gdbr.version import get_version
 
 
 with open('README.md', 'r') as f:
@@ -11,14 +11,15 @@ setup(name='GDBr',
       author_email='wowo0118@korea.ac.kr',
       description='Genome identification tool for Double-strand Break Repair',
       long_description=long_description,
+      long_description_content_type='text/markdown',
       url='https://github.com/Chemical118/GDBr',
       packages=['gdbr'],
-      package_dir={'gdbr' : './'},
+      package_dir={'gdbr' : 'gdbr/'},
       license='MIT',
       classifiers=['Development Status :: 4 - Beta',
                    'License :: OSI Approved :: MIT License'],
-      install_requires=['RagTag', 'svim-asm', 'pyfaidx', 'vcfpy', 'biopython', 'requests', 'p-tqdm'],
-      python_requires='>=3.6, <=3.10',
+      install_requires=['RagTag', 'svim-asm', 'pyfaidx', 'vcfpy', 'biopython', 'requests', 'p-tqdm', 'pathos'],
+      python_requires='>=3.7',
       zip_safe=True,
       scripts=['gdbr/gdbr']
      )
