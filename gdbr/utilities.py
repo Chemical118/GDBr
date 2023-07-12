@@ -171,7 +171,7 @@ def gdbr_parser():
                                help='preprocessed query sequence locations (same choromosome name with reference)',
                                required=True)
     
-    re_parser_anl.add_argument('-s', '--sv_csv',
+    re_parser_anl.add_argument('-v', '--sv_csv',
                                type=os.path.abspath,
                                nargs='+',
                                help='corrected variant CSV file',
