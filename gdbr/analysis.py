@@ -504,8 +504,8 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
             qry_basename = os.path.basename(qry_loc)
             with open(os.path.join(dsbr_save, qry_basename) + '.DSBR.tsv', 'w') as f:
                 tf = csv.writer(f, delimiter='\t')
-                tf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'SV_TYPE', 'REPAIR_TYPE', 'HOM(L)', 'HOM(R)', 'DSBR_CHR', 'DSBR_START', 'DSBR_END'))
-                tf.writerows([sv + list(hom)[1:] if len(sv) == 7 else sv for sv, hom in zip(sv_list, hom_list)])
+                tf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START', 'HOM_END', 'DSBR_CHR', 'DSBR_START', 'DSBR_END'))
+                tf.writerows([sv + list(hom)[2:] if len(sv) == 7 else sv for sv, hom in zip(sv_list, hom_list)])
         else:
             output_data.append(hom_list)
         
