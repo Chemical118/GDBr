@@ -496,8 +496,7 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
                                       diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
                                       hard_sv_list, pbar=False, num_cpus=loop_num_cpus)
         
-        for h, hom in zip(hom_list, hard_hom_list):
-            print(h[0], hom)
+        for hom in hard_hom_list:
             hom_list[hom[0]] = hom
 
         output_data = []
