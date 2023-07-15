@@ -17,19 +17,19 @@ conda install -c bioconda -c chemical118 -c conda-forge gdbr
 ### Preprocess
 By using `RagTag` and `svim-asm`, `GDBr` preprocess data and return properly scaffolded query `.fa` sequence file and variant `.vcf` file.
 ```sh
-gdbr preprocess -r <reference.fa> -q <query1.fa query2.fa ...> -o prepro -t <threads>
+gdbr preprocess -r <reference.fa> -q <query1.fa query2.fa ...> -o prepro -t <number of threads>
 ```
 > Preprocess step needs lots of memory, turn on `--low_memory` if you run out of memory
 ### Correct
 By using `BLAST`, `GDBr` correct the variant file to analysis DSBR accurately.
 ```sh
-gdbr correct -r <reference.fa> -q prepro/*.PRE.fa -v prepro/*.PRE.vcf -o sv -t <threads>
+gdbr correct -r <reference.fa> -q prepro/*.PRE.fa -v prepro/*.PRE.vcf -o sv -t <number of threads>
 ```
 
 ### Analysis
 `GDBr` analysis the variant and identify DSBR mechanism.
 ```sh
-gdbr analysis -r <reference.fa> -q prepro/*.PRE.fa -v sv/*.COR.csv -o dsbr -t <threads>
+gdbr analysis -r <reference.fa> -q prepro/*.PRE.fa -v sv/*.COR.csv -o dsbr -t <number of threads>
 ```
 
 #### Final output

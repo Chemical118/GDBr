@@ -49,7 +49,7 @@ def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc
             return process_map(f, it, max_workers=num_cpus, tqdm_class=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'), chunksize=1)
     else:
         executor = ProcessPoolExecutor(max_workers=num_cpus)
-        return executor.map(f, it, chunksize=1)
+        return list(executor.map(f, it, chunksize=1))
 
 
 def logprint(s):

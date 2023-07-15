@@ -68,8 +68,7 @@ class HomologyTest(TestCase):
             cf.writerow(('ID', 'SV_TYPE', 'CHROM', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
             cf.writerows(test_ans)
 
-        os.mkdir('data_')
-        os.mkdir('data_/0')
+        os.makedirs('data_/0', exist_ok=True)
         analysis_main('test/example/ref.fa', ['test/example/qry.fa'], [sv_loc], workdir='data_', pbar=False, file=False)
 
         # clean test
