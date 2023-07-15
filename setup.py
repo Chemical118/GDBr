@@ -1,5 +1,5 @@
-from setuptools import setup
 from gdbr.version import get_version
+from setuptools import setup
 
 
 with open('README.md', 'r') as f:
@@ -18,7 +18,7 @@ setup(name='GDBr',
       license='MIT',
       classifiers=['Development Status :: 4 - Beta',
                    'License :: OSI Approved :: MIT License'],
-      install_requires=['RagTag', 'svim-asm', 'pyfaidx', 'vcfpy', 'biopython', 'requests', 'p-tqdm', 'pathos'],
+      install_requires=['RagTag', 'svim-asm', 'pyfaidx', 'vcfpy', 'biopython', 'requests'],
       python_requires='>=3.7',
       zip_safe=True,
       scripts=['gdbr/gdbr']

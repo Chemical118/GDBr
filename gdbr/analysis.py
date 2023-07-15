@@ -1,13 +1,15 @@
+from gdbr.utilities import p_map, logprint, get_proper_thread
+from gdbr.correct import makeblastdb_from_location
 from Bio.Blast import NCBIXML
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.utilities import p_map, logprint, get_proper_thread
-from gdbr.correct import makeblastdb_from_location
 
 import multiprocessing as mp
 
 import subprocess
 import itertools
+import signal
+import time
 import csv
 import os
 
@@ -238,30 +240,33 @@ def is_away_from_locus(ref_start, ref_end, tar_start, tar_end, near_seq_kb_basel
         return dis > near_seq_kb_baseline * 1e3
 
 
-def _multiprocessing_find_insertion_chrom(chr_name, near_seq_kb_baseline, refdbdir, len_tar_seq, tar_seq_loc, chrom, ref_start, ref_end):
+def _multiprocessing_find_insertion_chrom(chr_data, near_seq_kb_baseline, refdbdir, len_tar_seq, tar_seq_loc, chrom, ref_start, ref_end):
+    chr_id, chr_name = chr_data
     with lock:
-        if global_num_blast_result.value > 1:
+        if num_blast_result.value > 1:
             return []
-    
-    blast_result = subprocess.run(['blastn', '-db', os.path.join(refdbdir, chr_name), '-query', tar_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
-    blast_result_list =  [] if blast_result.stdout == '' else map(blast_output_to_list, blast_result.stdout[:-1].split('\n'))
+        blast_process = subprocess.Popen(['blastn', '-db', os.path.join(refdbdir, chr_name), '-query', tar_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        pid_list[chr_id] = blast_process.pid
+
+    blast_result_stdout, _ = blast_process.communicate()
+    blast_result_stdout = blast_result_stdout.decode()
+    blast_result_list =  [] if blast_result_stdout == '' else map(blast_output_to_list, blast_result_stdout[:-1].split('\n'))
     blast_filter_result = list(filter(lambda t: t[1] > len_tar_seq * 0.95, blast_result_list)) if chr_name != chrom else \
                             list(filter(lambda t: t[1] > len_tar_seq * 0.95 and is_away_from_locus(ref_start, ref_end, t[6], t[7], near_seq_kb_baseline), blast_result_list))
     
     with lock:
-        global_num_blast_result.value += len(blast_filter_result)
-        if global_num_blast_result.value > 1:
-            return []
-
+        num_blast_result.value += len(blast_filter_result)
+    
     if len(blast_filter_result) == 1:
         return blast_filter_result[0][9], blast_filter_result[0][6], blast_filter_result[0][7]
     else:
         return []
 
 
-def _multiprocessing_init(_num_blast_result, _lock):
-    global global_num_blast_result, lock
-    global_num_blast_result = _num_blast_result
+def _multiprocessing_init(_num_blast_result, _pid_list, _lock):
+    global num_blast_result, pid_list, lock
+    num_blast_result = _num_blast_result
+    pid_list = _pid_list
     lock = _lock
 
 
@@ -274,18 +279,44 @@ def get_non_homology_insertion_loaction(tar_seq, near_seq_kb_baseline, refdbdir,
 
     lock = mp.Lock()
     num_blast_result = mp.Value('i', 0)
+
+    # reset pid list to -2
+    num_chrom = len(ref_chr_list)
+    pid_list = mp.Array('i', num_chrom)
+    for i in range(num_chrom):
+        pid_list[i] = -2
+
     ins_chrom = False
     ins_start = ins_end = -1
 
-    with mp.Pool(initializer=_multiprocessing_init, initargs=(num_blast_result, lock), processes=num_cpus) as p:
-        blast_total_result = p.map(partial(_multiprocessing_find_insertion_chrom, near_seq_kb_baseline=near_seq_kb_baseline, refdbdir=refdbdir,
-                                           len_tar_seq=len_tar_seq, tar_seq_loc=tar_seq_loc, chrom=chrom, ref_start=ref_start, ref_end=ref_end), ref_chr_list)
+    pool = mp.Pool(initializer=_multiprocessing_init, initargs=(num_blast_result, pid_list, lock), processes=num_cpus)
+    blast_async_result = pool.map_async(partial(_multiprocessing_find_insertion_chrom, near_seq_kb_baseline=near_seq_kb_baseline, refdbdir=refdbdir,
+                                        len_tar_seq=len_tar_seq, tar_seq_loc=tar_seq_loc, chrom=chrom, ref_start=ref_start, ref_end=ref_end), list(enumerate(ref_chr_list)))
+    
+    while not blast_async_result.ready():
+        time.sleep(0.3)
+        with lock:
+            if num_blast_result.value > 1:
+                pool.terminate()
+                break
+    
+    if blast_async_result.ready():
+        pool.close()
+    else:
+        for i in range(num_chrom):
+            if pid_list[i] != -2:
+                try:
+                    os.kill(pid_list[i], signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+
+    pool.join()
     
     os.remove(tar_seq_loc)
-
     if num_blast_result.value != 1:
         ins_chrom = num_blast_result.value
     else:
+        blast_total_result = blast_async_result.get()
         ins_chrom, ins_start, ins_end = tuple(itertools.chain.from_iterable(blast_total_result))
 
     return ins_chrom, ins_start, ins_end
@@ -486,7 +517,7 @@ def analysis_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
         hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
                                       ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline,
                                       diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
-                                      hard_sv_list, pbar=False, num_cpus=loop_num_cpus)
+                                      hard_sv_list, pbar=pbar , num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANH {qry_ind + 1}/{len(qry_loc_list)}')
         
         for hom in hard_hom_list:
             hom_list[hom[0]] = hom

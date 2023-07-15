@@ -1,4 +1,5 @@
-from pathos.multiprocessing import ProcessPool
+from concurrent.futures import ProcessPoolExecutor
+from tqdm.contrib.concurrent import process_map
 from tqdm.contrib.telegram import tqdm
 from gdbr.version import get_version
 
@@ -16,7 +17,7 @@ def get_telegram_data(file_loc):
     if os.path.exists(file_loc):
         with open(file_loc, 'r') as f:
             data = json.load(f)
-            return data['token'], data['chat_id']
+            return str(data['token']), str(data['chat_id'])
     else:
         return None
 
@@ -42,13 +43,13 @@ def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc
     if pbar:
         telegram_data = get_telegram_data(telegram_token_loc)
         if telegram_data is None:
-            return p_tqdm.p_map(f, it, num_cpus=num_cpus, desc=desc)
+            return process_map(f, it, max_workers=num_cpus, desc=desc, chunksize=1)
         else:
             # only telegram taskbar; silent stdout
-            return p_tqdm.p_map(f, it, num_cpus=num_cpus, tqdm=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'))
+            return process_map(f, it, max_workers=num_cpus, tqdm_class=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'), chunksize=1)
     else:
-        pool = ProcessPool(num_cpus)
-        return pool.map(f, it)
+        executor = ProcessPoolExecutor(max_workers=num_cpus)
+        return executor.map(f, it, chunksize=1)
 
 
 def logprint(s):
@@ -88,15 +89,11 @@ def gdbr_parser():
                                action='help',
                                help='show this help message and exit')
     
-    op_parser_pre.add_argument('--query_save',
+    op_parser_pre.add_argument('-o', '--preprocess_save',
                                type=os.path.abspath,
-                               default='gdbr_querys',
+                               default='gdbr_prepro',
                                help='preprocessed query save location')
 
-    op_parser_pre.add_argument('--vcf_save',
-                               type=os.path.abspath,
-                               default='gdbr_vcfs',
-                               help='variant calling file save location')
         
     op_parser_pre.add_argument('-t', '--threads',
                                type=int,

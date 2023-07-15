@@ -1,5 +1,5 @@
-from functools import partial
 from gdbr.utilities import p_map, logprint, get_proper_thread
+from functools import partial
 
 import subprocess
 import inspect

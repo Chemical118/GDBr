@@ -1,6 +1,6 @@
+from gdbr.utilities import p_map, logprint
 from functools import partial
 from pyfaidx import Fasta
-from gdbr.utilities import p_map, logprint
 
 import subprocess
 import vcfpy
