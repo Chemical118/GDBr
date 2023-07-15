@@ -5,7 +5,6 @@ from gdbr.version import get_version
 
 import argparse
 import datetime
-import p_tqdm
 import json
 import os
 
