@@ -249,6 +249,7 @@ def _multiprocessing_find_insertion_chrom(chr_data, near_seq_kb_baseline, refdbd
         pid_list[chr_id] = blast_process.pid
 
     blast_result_stdout, _ = blast_process.communicate()
+    pid_list[chr_id] = -2
     blast_result_stdout = blast_result_stdout.decode()
     blast_result_list =  [] if blast_result_stdout == '' else map(blast_output_to_list, blast_result_stdout[:-1].split('\n'))
     blast_filter_result = list(filter(lambda t: t[1] > len_tar_seq * 0.95, blast_result_list)) if chr_name != chrom else \
