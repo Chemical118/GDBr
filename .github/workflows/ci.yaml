@@ -19,7 +19,7 @@ jobs:
             -c bioconda
             python=${{ matrix.python-version }}
             biopython
-            blast
+            repeatmasker
             coverage
             tqdm>=4.46.0
             p-tqdm
