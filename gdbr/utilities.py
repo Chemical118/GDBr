@@ -1,11 +1,11 @@
-from concurrent.futures import ProcessPoolExecutor
-from tqdm.contrib.concurrent import process_map
 from tqdm.contrib.telegram import tqdm
+from pathos.pools import ProcessPool
 from gdbr.version import get_version
 
 import subprocess
 import argparse
 import datetime
+import p_tqdm
 import shutil
 import vcfpy
 import json
@@ -45,13 +45,13 @@ def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc
     if pbar:
         telegram_data = get_telegram_data(telegram_token_loc)
         if telegram_data is None:
-            return process_map(f, it, max_workers=num_cpus, desc=desc, chunksize=1)
+            return p_tqdm.p_map(f, it, num_cpus=num_cpus, desc=desc)
         else:
             # only telegram taskbar; silent stdout
-            return process_map(f, it, max_workers=num_cpus, tqdm_class=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'), chunksize=1)
+            return p_tqdm.p_map(f, it, num_cpus=num_cpus, tqdm=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'))
     else:
-        executor = ProcessPoolExecutor(max_workers=num_cpus)
-        return list(executor.map(f, it, chunksize=1))
+        pool = ProcessPool(num_cpus)
+        return pool.map(f, it)
 
 
 def logprint(s):
@@ -419,7 +419,7 @@ def check_file_exist(file_loc_data, file_type_list):
     for file_loc_list, file_type in zip(file_loc_data, file_type_list):
         for file_loc in file_loc_list:
             if not os.path.isfile(file_loc):
-                raise Exception(f'{file_type} file : {file_loc_list} missing')
+                raise Exception(f'{file_type} file : {file_loc} missing')
 
 
 def check_unique_basename(file_loc_list):

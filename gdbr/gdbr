@@ -18,12 +18,12 @@ def analysis_main(ref_loc, qry_loc_list, species, output='gdbr_output', workdir=
     preprocess_main(ref_loc, qry_loc_list, preprocess_save=preprocess_save, workdir=workdir, min_sv_size=pre_min_sv_size, num_cpus=num_cpus, low_memory=low_memory, trust=trust, pbar=pbar, telegram_token_loc=telegram_token_loc)
 
     sv_save = os.path.join(output, 'sv')
-    qry_loc_list = glob.glob(os.path.join(preprocess_save, 'query', '*.GDBr.preprocess.fa'))
-    vcf_loc_list = glob.glob(os.path.join(preprocess_save, 'vcf', '*.GDBr.preprocess.vcf'))
+    qry_loc_list = sorted(glob.glob(os.path.join(preprocess_save, 'query', '*.GDBr.preprocess.fa')))
+    vcf_loc_list = sorted(glob.glob(os.path.join(preprocess_save, 'vcf', '*.GDBr.preprocess.vcf')))
     correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, workdir=workdir, sv_save=sv_save, min_sv_size=cor_min_sv_size, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc)
     
     dsbr_save = os.path.join(output, 'result')
-    sv_loc_list = glob.glob(os.path.join(sv_save, '*.GDBr.correct.csv'))
+    sv_loc_list = sorted(glob.glob(os.path.join(sv_save, '*.GDBr.correct.csv')))
     annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len, near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline, diff_locus_hom_baseline=diff_locus_hom_baseline, workdir=workdir, dsbr_save=dsbr_save, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc)
 
 
