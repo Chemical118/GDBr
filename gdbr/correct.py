@@ -1,4 +1,4 @@
-from gdbr.utilities import p_map, logprint, check_file_exist, check_unique_basename, check_variant_caller, get_min_sv_size, remove_gdbr_postfix
+from gdbr.utilities import p_map, logprint, check_file_exist, check_unique_basename, check_variant_caller, get_min_sv_size, remove_gdbr_postfix, safe_makedirs, check_query_chrom
 from functools import partial
 from pyfaidx import Fasta
 
@@ -9,7 +9,7 @@ import os
 
 #                [0]       [1]        [2]        [3]        [4]      [5]      [6]      [7]       [8]
 blastn_fmt = ['pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'bitscore']
-trf_fmt = ['2', '5', '7', '80', '10', '50', '2000', '-ngs', '-h']
+trf_fmt = ['2', '5', '7', '80', '10', '50', '500', '-ngs', '-h']
 
 def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir):
     start_temp_seq_loc = os.path.join(qryworkdir, f'ref_start_{sv_id}.fasta')
@@ -103,7 +103,7 @@ def trf_repeat_check_first(ref_seq, ref_start, ref_end, sv_id, chrom, qryworkdir
     return trf_result.stdout != ''
 
 def trf_repeat_check_last(ref_seq, qry_seq, ref_start, ref_end, ref_len, qry_start, qry_end, qry_len, sv_id, chrom, qryworkdir, repeat_find_len=50):
-    trf_temp_seq_loc = os.path.join(qryworkdir, f'trf_first_{sv_id}.fasta')
+    trf_temp_seq_loc = os.path.join(qryworkdir, f'trf_last_{sv_id}.fasta')
 
     with open(trf_temp_seq_loc, 'w') as f:
         if ref_len > 0:
@@ -121,20 +121,24 @@ def trf_repeat_check_last(ref_seq, qry_seq, ref_start, ref_end, ref_len, qry_sta
     os.remove(trf_temp_seq_loc)
     return trf_result.stdout != ''
 
-def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, repeat_find_len=50, min_sv_size=50):
-    cal_id = record.ID[0].split('.')[1:-1][0]
+
+def get_real_sv(record_data, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, repeat_find_len=50, min_sv_size=50):
+    sv_id, cal_id, record, is_tar = record_data
+
+    if not is_tar:
+        return [sv_id, cal_id, 'NO_TARGET_CHROM']
     
     if cal_id not in {'DEL', 'INS'}:
-        return cal_id, 'UNSUP_ID'
+        return [sv_id, cal_id, 'UNSUP_ID']
 
     ref_seq = Fasta(ref_loc, build_index=False)
     qry_seq = Fasta(qry_loc, build_index=False)
 
-    ref_start, ref_end, sv_len, sv_id, chrom = record.POS + 1, record.INFO['END'], abs(record.INFO['SVLEN']), record.ID[0], record.CHROM
+    ref_start, ref_end, sv_len, chrom = record.POS + 1, record.INFO['END'], abs(record.INFO['SVLEN']), record.CHROM
 
     call_sv_seq = record.REF[1:] if cal_id == 'DEL' else record.ALT[0].value[1:]
     if trf_repeat_check_first(ref_seq, ref_start, ref_end, sv_id, chrom, qryworkdir, call_sv_seq, repeat_find_len=repeat_find_len):
-        return cal_id, 'REPEAT:TRF_FIRST'
+        return [sv_id, cal_id, 'REPEAT:TRF_FIRST']
 
     start_temp_seq = ref_seq[chrom][ref_start - sv_find_len - 1:ref_start - 1]
     end_temp_seq = ref_seq[chrom][ref_end:ref_end + sv_find_len]
@@ -142,7 +146,7 @@ def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, r
     start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir)
     
     if len(start_filter_result) != 1 or len(end_filter_result) != 1:
-        return cal_id, 'REPEAT:BLAST'
+        return [sv_id, cal_id, 'REPEAT:BLAST']
 
     ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result)
 
@@ -158,7 +162,7 @@ def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, r
         start_filter_result, end_filter_result = get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, dbdir, qryworkdir)
         
         if len(start_filter_result) != 1 or len(end_filter_result) != 1:
-            return cal_id, 'REPEAT:BLAST'
+            return [sv_id, cal_id, 'REPEAT:BLAST']
         
         ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_corrected_location(ref_start, ref_end, sv_find_len, start_filter_result, end_filter_result)
 
@@ -209,14 +213,21 @@ def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, r
 
         ref_start, ref_end, ref_len, qry_start, qry_end, qry_len = get_correctrd_location_by_idx(ref_temp_seq, qry_temp_seq, ref_start, ref_end, qry_start, qry_end)
     
+    real_sv_len = max(ref_len, qry_len)
     if qry_len < 0:
-        sv_name = 'ERR_POS'
-    elif max(ref_len, qry_len) < min_sv_size:
+        return [sv_id, cal_id, 'ERR_POS']
+
+    elif real_sv_len < min_sv_size:
         sv_name = 'SV_SIZE_FILTER'
+
+    elif real_sv_len > sv_len * 3:
+        return [sv_id, cal_id, 'SV_COR_ERR']
+    
     elif trf_repeat_check_last(ref_seq, qry_seq, ref_start, ref_end, ref_len, qry_start, qry_end, qry_len, sv_id, chrom, qryworkdir, repeat_find_len=repeat_find_len):
-        return cal_id, 'REPEAT:TRF_LAST'
+        return [sv_id, cal_id, 'REPEAT:TRF_LAST']
+    
     elif ref_len == 0 and qry_len == 0:
-        sv_name = 'FP_SV'
+        return [sv_id, cal_id, 'FP_SV']
 
     elif ref_len > 0 and qry_len > 0:
         sv_name = 'SUB'
@@ -227,7 +238,7 @@ def get_real_sv(record, ref_loc, qry_loc, dbdir, qryworkdir, sv_find_len=2000, r
     else:
         sv_name = 'DEL'
 
-    return cal_id, sv_name, chrom, ref_start, ref_end, qry_start, qry_end    
+    return [sv_id, cal_id, sv_name, chrom, ref_start, ref_end, qry_start, qry_end]  
 
 
 def makeblastdb_from_location(chr_name, seq_loc, dbdir):
@@ -241,7 +252,24 @@ def makeblastdb_from_location(chr_name, seq_loc, dbdir):
     os.remove(os.path.join(dbdir, chr_name + '.fasta'))
 
 
-def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000, repeat_find_len=50, workdir='data', sv_save='sv', min_sv_size=None, file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
+def get_proper_correct_order(record_data):
+    _, cal_id, record, is_tar = record_data
+
+    if not is_tar or cal_id not in {'DEL', 'INS'}:
+        return 0
+    else:
+        return -abs(record.INFO['SVLEN'])
+
+
+def get_vcf_tot_data(vcf_loc, ref_chr_list):
+    with vcfpy.Reader.from_path(vcf_loc) as tot_record:
+        vcf_tot_data = [(index, record.ID[0].split('.')[1:-1][0], record, record.CHROM in ref_chr_list) for index, record in enumerate(tot_record)]
+    
+    return vcf_tot_data
+
+
+def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000, repeat_find_len=50, workdir='data', sv_save='sv', min_sv_size=None,
+                 num_cpus=1, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, vcf_loc_list], ['Reference', 'Query', 'Variant'])
     check_unique_basename(qry_loc_list)
     check_variant_caller(vcf_loc_list)
@@ -256,50 +284,42 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
         raise Exception('The number of query and variant must be same')
     
     os.makedirs(workdir, exist_ok=True)
-    os.makedirs(sv_save, exist_ok=True)
+    safe_makedirs(sv_save)
 
     # read .fasta file
-    ref_seq = Fasta(ref_loc, build_index=True)
+    ref_seq = Fasta(ref_loc, build_index=False)
 
     # get 1Mbp chromosome
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
+    if not trust_query:
+        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus, pbar=False)
 
-    refdbdir = os.path.join(workdir, 'db')
-    os.makedirs(refdbdir, exist_ok=True)
-
-    p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
-    
-    logprint(f'Task start : {len(vcf_loc_list)} query detected')
+    logprint(f'Task correct start : {len(vcf_loc_list)} query detected')
     output_data = []
     for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
-        qry_seq = Fasta(qry_loc, build_index=True)
-
-        # If there no same chromosone in query and reference
+        qry_seq = Fasta(qry_loc, build_index=False)
         qry_chr_list = list(set(ref_chr_list) & set(qry_seq.records.keys()))
-        if qry_chr_list == []:
-            raise Exception('Chromosone name must same')
         
-        qryworkdir = os.path.join(workdir, str(qry_ind))
-        dbdir = os.path.join(qryworkdir, 'db')
+        qryworkdir = os.path.join(workdir, str(qry_ind) + '_gdbr')
+        dbdir = os.path.join(qryworkdir, 'db_gdbr')
         
         os.makedirs(dbdir, exist_ok=True)
 
         # split query .fasta file and makeblastdb per chromosome
         p_map(partial(makeblastdb_from_location, seq_loc=qry_loc, dbdir=dbdir), qry_chr_list, num_cpus=num_cpus, pbar=False)
 
-        with vcfpy.Reader.from_path(vcf_loc) as tot_record:
-            vcf_tot_data = [record for record in tot_record if record.CHROM in ref_chr_list]
-        
+        vcf_tot_data = sorted(get_vcf_tot_data(vcf_loc, ref_chr_list), key=get_proper_correct_order)
+
         sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, min_sv_size=min_sv_size, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, 
                         num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'COR {qry_ind + 1}/{len(qry_loc_list)}')
-        
-        sv_list = [[i] + list(v) for i, v in enumerate(sv_list)]
+
+        sv_list = sorted(sv_list, key=lambda t: t[0])
 
         rpm_temp_seq_loc = os.path.join(qryworkdir, str(qry_ind)) + '.fasta'
         with open(rpm_temp_seq_loc, 'w') as f:
             for sv in sv_list:
                 if sv[2] in {'DEL', 'INS', 'SUB'}:
-                    sv_id, _, cor_id, chrom, ref_start, ref_end, qry_start, qry_end = sv
+                    sv_id, _, _, chrom, ref_start, ref_end, qry_start, qry_end = sv
 
                     ref_len = ref_end - ref_start + 1
                     qry_len = qry_end - qry_start + 1
@@ -314,10 +334,10 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
                         f.write(f'>{sv_id}.qry\n')
                         f.write(str(temp_seq) + '\n\n')
         
-        subprocess.run(['RepeatMasker', '-spec', 'human', '-nopost', '-pa', str(num_cpus), rpm_temp_seq_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['RepeatMasker', '-spec', species, '-nopost', '-pa', str(num_cpus), rpm_temp_seq_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=workdir)
         
         rpm_output_loc, output_postfix = (rpm_temp_seq_loc + '.cat', '.cat') if os.path.isfile(rpm_temp_seq_loc + '.cat') else (rpm_temp_seq_loc + '.cat.gz', '.cat.gz')
-        subprocess.run(['ProcessRepeats', '-spec', species, '-gff', rpm_output_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['ProcessRepeats', '-spec', species, '-gff', rpm_output_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=workdir)
         
         with open(rpm_temp_seq_loc + '.out.gff', 'r') as f:
             tf = csv.reader(f, delimiter='\t')
@@ -330,16 +350,10 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
         for postfix in ['', output_postfix, '.out', '.out.gff', '.tbl']:
             os.remove(rpm_temp_seq_loc + postfix)
 
-        if file:
-            qry_basename = os.path.basename(qry_loc)
-            with open(os.path.join(sv_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.correct.csv', 'w') as f:
-                cf = csv.writer(f)
-                cf.writerow(('ID', 'TYPE', 'REAL_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
-                cf.writerows(sv_list)
-        else:
-            output_data.append(sv_list)
+        qry_basename = os.path.basename(qry_loc)
+        with open(os.path.join(sv_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.correct.csv', 'w') as f:
+            cf = csv.writer(f)
+            cf.writerow(('ID', 'TYPE', 'REAL_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END'))
+            cf.writerows(sv_list)
 
-        logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} correction complete')
-
-    if not file:
-        return output_data
+        logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(vcf_loc)} correct complete')

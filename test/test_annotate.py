@@ -1,8 +1,6 @@
 from unittest import TestCase
 from gdbr.annotate import annotate_main
 
-import os
-import csv
 import shutil
 
 

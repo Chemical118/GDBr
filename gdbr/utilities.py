@@ -1,6 +1,11 @@
 from tqdm.contrib.telegram import tqdm
 from pathos.pools import ProcessPool
 from gdbr.version import get_version
+from pyfaidx import Fasta
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 
 import subprocess
 import argparse
@@ -108,11 +113,27 @@ def gdbr_parser():
                                default=1,
                                help='number of threads')
     
+    fo_parser_anl.add_argument('--min_sv_size',
+                               type=int,
+                               help='minimum variant size for preprocess and correct step')
+    
+    fo_parser_anl.add_argument('--benchmark',
+                               type=float,
+                               nargs='?',
+                               const=None,
+                               metavar='BENCHMARK_INTERVAL',
+                               default=argparse.SUPPRESS,
+                               help='turn on benchmark mode, if you specify an argument you can adjust the interval of memory benchmark')
+
     fo_parser_anl.add_argument('--workdir',
                                type=os.path.abspath,
                                default='gdbr_data',
                                help='program work directory')
     
+    fo_parser_anl.add_argument('--overwrite_output',
+                               action='store_true',
+                               help='overwrite the output directory')
+
     fo_parser_anl.add_argument('--silent',
                                action='store_true',
                                help='turn off progress bar')
@@ -126,8 +147,7 @@ def gdbr_parser():
     po_parser_anl = parser_anl.add_argument_group('preprocess optional arguments')
     po_parser_anl.add_argument('--pre_min_sv_size',
                                type=int,
-                               default=50,
-                               help='minimum variant size at preprocess')
+                               help='minimum variant size at preprocess step')
     
     po_parser_anl.add_argument('--low_memory',
                                action='store_true',
@@ -151,8 +171,7 @@ def gdbr_parser():
     
     co_parser_anl.add_argument('--cor_min_sv_size',
                                type=int,
-                               default=50,
-                               help='minimum variant size at correct')
+                               help='minimum variant size at correct step')
     
 
     # analysis annotate optional arguments
@@ -230,11 +249,23 @@ def gdbr_parser():
                                action='store_true',
                                help='When you run the preprocess again, speed up the preprocess with data left in the work directory.')
     
+    op_parser_pre.add_argument('--benchmark',
+                               type=float,
+                               nargs='?',
+                               const=None,
+                               metavar='BENCHMARK_INTERVAL',
+                               default=argparse.SUPPRESS,
+                               help='turn on benchmark mode, if you specify an argument you can adjust the interval of memory benchmark')
+    
     op_parser_pre.add_argument('--workdir',
                                type=os.path.abspath,
                                default='gdbr_data',
                                help='program work directory')
     
+    op_parser_pre.add_argument('--overwrite_output',
+                               action='store_true',
+                               help='overwrite the output directory')
+
     op_parser_pre.add_argument('--silent',
                                action='store_true',
                                help='turn off progress bar')
@@ -296,14 +327,25 @@ def gdbr_parser():
 
     op_parser_cor.add_argument('--min_sv_size',
                                type=int,
-                               default=50,
                                help='minimum variant size (you must use this option when not using variant calling file from GDBr )')
     
+    op_parser_cor.add_argument('--benchmark',
+                               type=float,
+                               nargs='?',
+                               const=None,
+                               metavar='BENCHMARK_INTERVAL',
+                               default=argparse.SUPPRESS,
+                               help='turn on benchmark mode, if you specify an argument you can adjust the interval of memory benchmark')
+
     op_parser_cor.add_argument('--workdir',
                                type=os.path.abspath,
                                default='gdbr_data',
                                help='program work directory')
-    
+
+    op_parser_cor.add_argument('--overwrite_output',
+                               action='store_true',
+                               help='overwrite the output directory')
+
     op_parser_cor.add_argument('--silent',
                                action='store_true',
                                help='turn off progress bar')
@@ -377,16 +419,28 @@ def gdbr_parser():
                                type=int,
                                default=3,
                                help='minimum homology length to find different locus DSBR')
-    
+
+    op_parser_ant.add_argument('--benchmark',
+                               type=float,
+                               nargs='?',
+                               const=None,
+                               metavar='BENCHMARK_INTERVAL',
+                               default=argparse.SUPPRESS,
+                               help='turn on benchmark mode, if you specify an argument you can adjust the interval of memory benchmark')
+
     op_parser_ant.add_argument('--workdir',
                                type=os.path.abspath,
                                default='gdbr_data',
                                help='program work directory')
-    
+
+    op_parser_ant.add_argument('--overwrite_output',
+                               action='store_true',
+                               help='overwrite the output directory')
+
     op_parser_ant.add_argument('--silent',
                                action='store_true',
                                help='turn off progress bar')
-    
+
     op_parser_ant.add_argument('--telegram_data_loc',
                                type=os.path.abspath,
                                default=None,
@@ -441,7 +495,21 @@ def check_variant_caller(vcf_loc_list):
 
             if not find:
                 raise Exception(f"Can't recongnize VCF file source at header : {record.path}")
-        
+
+
+def check_fai(fasta_loc):
+    return os.path.isfile(fasta_loc + '.fai')
+
+
+def check_query_chrom(qry_loc, ref_chr_list):
+    if not check_fai(qry_loc):
+        subprocess.run(['samtools', 'faidx', qry_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    qry_seq = Fasta(qry_loc, build_index=False)
+    qry_chr_list = list(set(ref_chr_list) & set(qry_seq.records.keys()))
+    if qry_chr_list == []:
+        raise Exception(f'Wrong query {qry_loc} : Query must have at least one of the same chromosomes as the reference')
+
 
 def get_min_sv_size(vcf_loc):
     with vcfpy.Reader.from_path(vcf_loc) as record:
@@ -454,11 +522,12 @@ def get_min_sv_size(vcf_loc):
 
 def clean_workdir(workdir):
     for item in os.listdir(workdir):
-        if os.path.isdir(os.path.join(workdir, item)) and (item == 'db' or item.isdigit()):
+        if os.path.isdir(os.path.join(workdir, item)) and item[-5:] == '_gdbr' and (item[:-5] == 'db' or item[:-5].isdigit()):
             shutil.rmtree(os.path.join(workdir, item))
 
     if len(os.listdir(workdir)) == 0:
         os.rmdir(workdir)
+
 
 def remove_gdbr_postfix(basename):
     if '.GDBr.' in basename:
@@ -467,3 +536,227 @@ def remove_gdbr_postfix(basename):
         return '.'.join(basename_list[:gdbr_index])
     else:
         return basename
+
+
+def safe_makedirs(targetdir, overwrite_output=False):
+    if not os.path.exists(targetdir) or len(os.listdir(targetdir)) == 0 or overwrite_output:
+        os.makedirs(targetdir, exist_ok=True)
+    else:
+        index = 1
+        while True:
+            new_workdir = f'{targetdir}.{index}'
+            if not os.path.exists(new_workdir):
+                os.rename(targetdir, new_workdir)
+                os.makedirs(targetdir)
+                break
+            index += 1
+
+
+def check_reference(ref_loc):
+    if not check_fai(ref_loc):
+        subprocess.run(['samtools', 'faidx', ref_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    ref_seq = Fasta(ref_loc, build_index=False)
+    ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
+
+    if ref_chr_list == []:
+        raise Exception(f'Wrong reference {ref_loc} : Reference must have a chromosome larger than 1 Mbp')
+
+
+def save_fig(fig, savedir, name):
+    fig.savefig(os.path.join(savedir, name + '.png'), dpi=300, bbox_inches='tight')
+    fig.savefig(os.path.join(savedir, name + '.pdf'), bbox_inches='tight')
+
+
+def saferound(v, d=0, md=5):
+    for i in range(d, max(md, d) + 1):
+        r = round(v, i)
+        if r != 0:
+            return r if i else int(r)
+    return r
+
+
+def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
+                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, query_num):
+    # Default setting
+    legend_fontsize = 8.5
+    width = 0.17
+
+    sns.set_palette('colorblind')
+    cb_hex_list = sns.color_palette('colorblind').as_hex()
+
+    code_palette_data = [('DEL', 0),
+                        ('INS', 1),
+                        ('SUB', 2),
+                        ('BND', 6),
+                        ('INV', 4),
+                        ('REPEAT', 7),
+                        ('EXCEPT', 6),
+                        ('HOM', 0),
+                        ('HOM_GT_SV_90', 1),
+                        ('NO_HOM', 6),
+                        ('SUB_HOM_DUP', 0),
+                        ('SUB_HOM_GT_SV_90', 1),
+                        ('DIFF_LOCUS_DSBR', 2),
+                        ('SUB_UNIQUE_NO_HOM', 3),
+                        ('SUB_REPEAT', 8),
+                        ('SUB_NOT_SPECIFIED', 7),
+                        ('REPEAT:TRF_FIRST', 7),
+                        ('REPEAT:BLAST', 5),
+                        ('REPEAT:TRF_LAST', 4),
+                        ('REPEAT:RPM', 8),
+                        ('SV_COR_ERR', 3),
+                        ('SV_SIZE_FILTER', 9)]
+    
+    code_palette_dict = dict((s, cb_hex_list[p]) for s, p in code_palette_data)
+
+    # Preprocess classification
+    target_data = [(k, pre_type_cnt[k] / query_num if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Preprocess variant classification average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    target_data = [(k, pre_type_cnt[k] / tot_sv_len * 100 if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Preprocess variant classification frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+    save_fig(fig, savedir, 'preprocess_classification')
+
+    # Correct classification
+    # verbose figure
+    fig, ax = plt.subplots(2, 2, figsize=(6.4 * 2, 9.6))
+    cor_type_cnt['EXCEPT'] = sum(cor_type_cnt.get(i, 0) for i in ['FP_SV', 'ERR_POS', 'UNSUP_ID', 'NO_TARGET_CHROM'])
+    target_list = ['DEL', 'INS', 'SUB', 'REPEAT:TRF_FIRST', 'REPEAT:BLAST', 'REPEAT:TRF_LAST', 'REPEAT:RPM', 'SV_COR_ERR', 'SV_SIZE_FILTER', 'EXCEPT']
+    target_data = [(k, cor_type_cnt[k] / query_num if k in cor_type_cnt else 0) for k in target_list]
+    ax1, ax2 = ax[0, 1], ax[1, 1]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Corrected variant classification average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Corrected variant classification frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+
+    # silent figure
+    cor_type_cnt['REPEAT'] = sum(cor_type_cnt.get(i, 0) for i in ['REPEAT:TRF_FIRST', 'REPEAT:BLAST', 'REPEAT:TRF_LAST', 'REPEAT:RPM'])
+    cor_type_cnt['EXCEPT'] = sum(cor_type_cnt.get(i, 0) for i in ['FP_SV', 'ERR_POS', 'UNSUP_ID', 'SV_COR_ERR', 'SV_SIZE_FILTER', 'NO_TARGET_CHROM'])
+    target_data = [(k, cor_type_cnt[k] / query_num if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
+    ax1, ax2 = ax[0, 0], ax[1, 0]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Corrected variant classification average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Corrected variant classification frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+    save_fig(fig, savedir, 'correct_classification')
+    
+    # Deletion, insertion, indel classification
+    cnt = del_type_cnt
+    target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
+    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    fig, ax = plt.subplots(2, 3, figsize=(6.4 * 3, 9.6))
+
+    ax1, ax2 = ax[0, 0], ax[1, 0]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Deletion variant DSBR estimation average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Deletion variant DSBR estimation frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+
+    ax1, ax2 = ax[0, 1], ax[1, 1]
+    cnt = ins_type_cnt
+    target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
+    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Insertion variant DSBR estimation average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Insertion variant DSBR estimation frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+
+    ax1, ax2 = ax[0, 2], ax[1, 2]
+    cnt = del_type_cnt + ins_type_cnt
+    target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
+    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Indel variant DSBR estimation average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Indel variant DSBR estimation frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+    save_fig(fig, savedir, 'result_indel_classification')
+
+    # Substitution classification
+    cnt = sub_type_cnt
+    target_list = ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_UNIQUE_NO_HOM', 'DIFF_LOCUS_DSBR', 'SUB_REPEAT', 'SUB_NOT_SPECIFIED']
+    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+    ax1.axes.get_yaxis().set_visible(False)
+    ax1.set_title('Substitution variant DSBR estimation average count')
+    ax1.set_xlabel('Avg. count')
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+
+    target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
+    pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+    ax2.axes.get_yaxis().set_visible(False)
+    ax2.set_title('Substitution variant DSBR estimation frequency')
+    ax2.set_xlabel('Frequency (%)')
+    ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
+    save_fig(fig, savedir, 'result_sub_classification')
+
+    # Indel homology distribution
+    if indel_hom_cnt:
+        fig, ax_list = plt.subplots(3, 1, figsize=(6.4, 14.4))
+        for tar_range, ax in zip([(1, 200), (1, 30), (15, 200)], ax_list):
+            s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
+            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+        ax_list[0].set_title('Indel homology distribution')
+        save_fig(fig, savedir, 'result_indel_hom_distribution')
+
+    # Templated insertion respective homology distribution
+    if temp_ins_hom_cnt:
+        fig, ax_list = plt.subplots(2, 1, figsize=(6.4, 9.6))
+        for tar_range, ax in zip([(1, 200), (1, 30)], ax_list):
+            s = sns.histplot(x=temp_ins_hom_cnt.keys(), weights=temp_ins_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
+            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+        ax_list[0].set_title('Templated insertion respective homology distribution')
+        save_fig(fig, savedir, 'temp_ins_hom_distribution')
+
+    # Different locus DSBR respective homology distribution
+    if diff_locus_dsbr_hom_cnt:
+        fig, ax_list = plt.subplots(2, 1, figsize=(6.4, 9.6))
+        for tar_range, ax in zip([(1, 2000), (1, 200)], ax_list):
+            s = sns.histplot(x=diff_locus_dsbr_hom_cnt.keys(), weights=diff_locus_dsbr_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
+            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+        ax_list[0].set_title('Different locus DSBR respective homology distribution')
+        save_fig(fig, savedir, 'diff_locus_dsbr_hom_distribution')

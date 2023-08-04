@@ -48,7 +48,8 @@ gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDB
 | Field             | Description                                          |
 |-------------------|------------------------------------------------------|
 | ID                | GDBr.\<query order\>.\<variant order\>               |
-| SV_TYPE           | INS, DEL, SUB, etc (fail to find variant)            |
+| CALL_TYPE         | Variant type : INS, DEL, etc                         |
+| SV_TYPE           | Corrected variant type : INS, DEL, SUB, etc          |
 | CHR               | variant chromosome                                   |
 | REF_START         | variant reference start location                     |
 | REF_END           | variant reference end location                       |

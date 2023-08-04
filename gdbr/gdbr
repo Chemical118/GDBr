@@ -1,65 +1,135 @@
 #!/usr/bin/env python3
+import subprocess
+import psutil
 import glob
+import time
 import sys
 import os
 
-from gdbr.utilities import gdbr_parser, logprint, check_proper_species, clean_workdir
+from gdbr.utilities import gdbr_parser, logprint, check_proper_species, clean_workdir, safe_makedirs, check_reference
 from gdbr.version import get_version
 from gdbr.prerprocess import preprocess_main
 from gdbr.correct import correct_main
 from gdbr.annotate import annotate_main
+from datetime import datetime
 
-def analysis_main(ref_loc, qry_loc_list, species, output='gdbr_output', workdir='data', pre_min_sv_size=50, num_cpus=1, low_memory=False, trust=False,
+def analysis_main(ref_loc, qry_loc_list, species, output='gdbr_output', workdir='data', pre_min_sv_size=50, num_cpus=1, low_memory=False, trust_workdir=False,
                   sv_find_len=2000, repeat_find_len=50, cor_min_sv_size=50,
                   hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, 
-                  pbar=True, telegram_token_loc='telegram.json'):
+                  pbar=True, telegram_token_loc='telegram.json', overwrite_output=False):
     
+    safe_makedirs(output)
+
     preprocess_save = os.path.join(output, 'prepro')
-    preprocess_main(ref_loc, qry_loc_list, preprocess_save=preprocess_save, workdir=workdir, min_sv_size=pre_min_sv_size, num_cpus=num_cpus, low_memory=low_memory, trust=trust, pbar=pbar, telegram_token_loc=telegram_token_loc)
+    preprocess_main(ref_loc, qry_loc_list, preprocess_save=preprocess_save, workdir=workdir, min_sv_size=pre_min_sv_size, num_cpus=num_cpus, low_memory=low_memory, trust_workdir=trust_workdir, pbar=pbar, telegram_token_loc=telegram_token_loc, overwrite_output=overwrite_output)
 
     sv_save = os.path.join(output, 'sv')
     qry_loc_list = sorted(glob.glob(os.path.join(preprocess_save, 'query', '*.GDBr.preprocess.fa')))
     vcf_loc_list = sorted(glob.glob(os.path.join(preprocess_save, 'vcf', '*.GDBr.preprocess.vcf')))
-    correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, workdir=workdir, sv_save=sv_save, min_sv_size=cor_min_sv_size, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc)
+    correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, workdir=workdir, sv_save=sv_save, min_sv_size=cor_min_sv_size, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, overwrite_output=overwrite_output)
     
     dsbr_save = os.path.join(output, 'result')
     sv_loc_list = sorted(glob.glob(os.path.join(sv_save, '*.GDBr.correct.csv')))
-    annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len, near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline, diff_locus_hom_baseline=diff_locus_hom_baseline, workdir=workdir, dsbr_save=dsbr_save, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc)
+    annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len, near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline, diff_locus_hom_baseline=diff_locus_hom_baseline, workdir=workdir, dsbr_save=dsbr_save, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, overwrite_output=overwrite_output, trust_query=True)
+
+
+def benchmark_main(arg):
+    check_interval = 1 if arg.benchmark is None else arg.benchmark
+
+    sys_argv_list = sys.argv
+    bench_index = sys_argv_list.index('--benchmark')
+
+    sys_argv_list.pop(bench_index)
+    if arg.benchmark is not None:
+        sys_argv_list.pop(bench_index)
+
+    safe_makedirs(arg.workdir)
+    log_save = os.path.join(arg.workdir, 'time.gdbr.' + datetime.now().strftime("%Y.%m.%d.%H.%M.%S"))
+
+    process = subprocess.Popen(['time', '-f', '%U %S %P %E', '-o', log_save] + sys_argv_list)
+
+    max_memory_GB = 0
+    while process.poll() is None:
+        time.sleep(check_interval)
+        memory_byte = 0
+
+        for p in psutil.Process(process.pid).children(recursive=True):
+            try:
+                memory_byte += p.memory_info().rss
+            except psutil.NoSuchProcess:
+                pass
+        
+        max_memory_GB = max(max_memory_GB, memory_byte / (1000 * 1000 * 1000))
+
+    if process.returncode != 0:
+        os.remove(log_save)
+        sys.exit(process.returncode)
+    else:
+        with open(log_save, 'r') as f:
+            log_data = f.readline()
+
+        log_list = log_data.split()
+        os.remove(log_save)
+
+        logprint('GDBr benchmark complete')
+
+        print(f'User time (seconds) : {log_list[0]}', file=sys.stderr)
+        print(f'System time (seconds) : {log_list[1]}', file=sys.stderr)
+        print(f'Percent of CPU this job got : {log_list[2]}', file=sys.stderr)
+        print(f'Multiprocessing efficiency : {round(float(log_list[2][:-1]) / arg.threads / 100, 4)}', file=sys.stderr)
+        print(f'Wall clock time (h:mm:ss or m:ss) : {log_list[3]}', file=sys.stderr)
+        print(f'Max memory usage (GB) : {round(max_memory_GB, 4)}', file=sys.stderr)
+        clean_workdir(arg.workdir)
 
 
 def main():
     arg = gdbr_parser().parse_args()
 
+    check_reference(arg.reference)
+
+    if 'benchmark' in arg:
+        benchmark_main(arg)
+        return
+        
     logprint(f'Version : GDBr v{get_version()}')
     logprint(f'Command : gdbr {" ".join(sys.argv[1:])}')
 
     pbar = not arg.silent
     if arg.command == 'analysis':
+        if arg.min_sv_size is not None and (arg.pre_min_sv_size is not None or arg.cor_min_sv_size is not None):
+            raise Exception('Do not use --min_sv_size with --pre_min_sv_size or --cor_min_sv_size')
+        elif arg.min_sv_size is not None:
+            pre_min_sv_size = cor_min_sv_size = arg.min_sv_size
+        else:
+            pre_min_sv_size = 50 if arg.pre_min_sv_size is None else arg.pre_min_sv_size
+            cor_min_sv_size = 50 if arg.cor_min_sv_size is None else arg.cor_min_sv_size
+
         check_proper_species(arg.species, arg.workdir)
         analysis_main(arg.reference, arg.query, arg.species, output=arg.output, num_cpus=arg.threads,
-                      workdir=arg.workdir, pre_min_sv_size=arg.pre_min_sv_size, low_memory=arg.low_memory, trust=arg.trust_workdir,
-                      sv_find_len=arg.sv_find_len, repeat_find_len=arg.repeat_find_len, cor_min_sv_size=arg.cor_min_sv_size,
+                      workdir=arg.workdir, pre_min_sv_size=pre_min_sv_size, low_memory=arg.low_memory, trust_workdir=arg.trust_workdir,
+                      sv_find_len=arg.sv_find_len, repeat_find_len=arg.repeat_find_len, cor_min_sv_size=cor_min_sv_size,
                       hom_find_len=arg.hom_find_len, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
                       user_gap_baseline=arg.temp_gap_baseline, near_seq_kb_baseline=arg.near_sv_kb_baseline, diff_locus_hom_baseline=arg.diff_locus_hom_baseline,
-                      pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+                      pbar=pbar, telegram_token_loc=arg.telegram_data_loc, overwrite_output=arg.overwrite_output)
 
     elif arg.command == 'preprocess':
         preprocess_main(arg.reference, arg.query, preprocess_save=arg.preprocess_save, num_cpus=arg.threads,
-                        workdir=arg.workdir, min_sv_size=arg.min_sv_size, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, low_memory=arg.low_memory, trust=arg.trust_workdir)
+                        workdir=arg.workdir, min_sv_size=arg.min_sv_size, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, low_memory=arg.low_memory, trust_workdir=arg.trust_workdir, overwrite_output=arg.overwrite_output)
     
     elif arg.command == 'correct':
         check_proper_species(arg.species, arg.workdir)
         correct_main(arg.reference, arg.query, arg.vcf, arg.species, sv_save=arg.sv_save, num_cpus=arg.threads,
-                     sv_find_len=arg.sv_find_len, repeat_find_len=arg.repeat_find_len, min_sv_size=arg.min_sv_size, workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+                     sv_find_len=arg.sv_find_len, repeat_find_len=arg.repeat_find_len, min_sv_size=arg.min_sv_size, workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, overwrite_output=arg.overwrite_output)
 
     elif arg.command == 'annotate':
         annotate_main(arg.reference, arg.query, arg.sv_csv, dsbr_save=arg.result_save, num_cpus=arg.threads,
                       hom_find_len=arg.hom_find_len, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
                       user_gap_baseline=arg.temp_gap_baseline, near_seq_kb_baseline=arg.near_sv_kb_baseline, diff_locus_hom_baseline=arg.diff_locus_hom_baseline,
-                      workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc)
+                      workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, overwrite_output=arg.overwrite_output)
     
     clean_workdir(arg.workdir)
     logprint(f'GDBr {arg.command} complete. Have a good day :)')
+
 
 if __name__ == '__main__':
     main()

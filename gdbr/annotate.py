@@ -1,10 +1,12 @@
-from gdbr.utilities import p_map, logprint, get_proper_thread, check_file_exist, check_unique_basename, remove_gdbr_postfix
+from gdbr.utilities import p_map, logprint, get_proper_thread, check_file_exist, check_unique_basename, remove_gdbr_postfix, safe_makedirs, check_query_chrom, draw_result
 from gdbr.correct import makeblastdb_from_location
+from collections import Counter
 from Bio.Blast import NCBIXML
 from functools import partial
 from pyfaidx import Fasta
 
 import multiprocessing as mp
+import pandas as pd
 
 import subprocess
 import itertools
@@ -29,14 +31,15 @@ def blast_output_to_list(blast_fmt_output):
 def get_sv_list(sv_loc):
     with open(sv_loc, 'r') as f:
         cf = csv.reader(f)
-        sv_list = [[int(i[0]), i[1], i[2], i[3], int(i[4]), int(i[5]), int(i[6]), int(i[7])] if i[2] in {'DEL', 'INS', 'SUB'} else [int(i[0]), i[1], i[2].split(':')[0] if ':' in i[2] else i[2]] for i in [l for l in cf][1:]]
+        sv_list = [[int(i[0]), i[1], i[2], i[3], int(i[4]), int(i[5]), int(i[6]), int(i[7])] if i[2] in {'DEL', 'INS', 'SUB'} else [int(i[0]), i[1], i[2]] for i in [l for l in cf][1:]]
     return sv_list
 
 
 def get_one_way_homology(ref_part_seq, qry_part_seq, ref_hom_find_len, qry_hom_find_len, sv_id, qryworkdir):
     blast_filter_result = []
+    ans_blast_filter_result = []
     ref_hom = ref_bitscore = 0
-    temp_ref_hom_find_len = 3
+    temp_ref_hom_find_len = 5
 
     ref_part_seq_loc = os.path.join(qryworkdir, f'ref_{sv_id}.fasta')
     temp_qry_part_seq_loc = os.path.join(qryworkdir, f'qry_{sv_id}.fasta')
@@ -63,15 +66,15 @@ def get_one_way_homology(ref_part_seq, qry_part_seq, ref_hom_find_len, qry_hom_f
         if len(blast_filter_result) == 0:
             break
         
-        blast_filter_result = blast_filter_result[0]
-        ref_hom = blast_filter_result[7] - ref_hom_find_len
-        ref_bitscore = blast_filter_result[8]
+        ans_blast_filter_result = blast_filter_result[0]
+        ref_hom = ans_blast_filter_result[7] - ref_hom_find_len
+        ref_bitscore = ans_blast_filter_result[8]
 
     os.remove(ref_part_seq_loc)
     os.remove(temp_qry_part_seq_loc)
     
-    ref_hom_end = ref_hom_find_len - 1 if blast_filter_result == [] else blast_filter_result[7] - 1 
-    qry_hom_end = qry_hom_find_len - 1 if blast_filter_result == [] else blast_filter_result[5] - 1
+    ref_hom_end = ref_hom_find_len - 1 if ans_blast_filter_result == [] else ans_blast_filter_result[7] - 1 
+    qry_hom_end = qry_hom_find_len - 1 if ans_blast_filter_result == [] else ans_blast_filter_result[5] - 1
 
     ref_part_seq_len = len(ref_part_seq)
     qry_part_seq_len = len(qry_part_seq)
@@ -350,27 +353,27 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
         if is_find_ins_ref:
             ref_ins_len = ref_ins_end - ref_ins_start + 1                    
             ref_ins_lef_hom, ref_ins_lef_hom_seq = get_one_way_homology(ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end].reverse,
-                                                   ref_seq[ref_ins_chrom][ref_ins_start - 1 - hom_find_len:ref_ins_end].reverse,
-                                                   ref_len, ref_ins_len, sv_id, qryworkdir)
+                                                                        ref_seq[ref_ins_chrom][ref_ins_start - 1 - hom_find_len:ref_ins_end].reverse,
+                                                                        ref_len, ref_ins_len, sv_id, qryworkdir)
             
             ref_ins_rht_hom, ref_ins_rht_hom_seq = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len],
-                                                   ref_seq[ref_ins_chrom][ref_ins_start - 1:ref_ins_end + hom_find_len],
-                                                   ref_len, ref_ins_len, sv_id, qryworkdir)
+                                                                        ref_seq[ref_ins_chrom][ref_ins_start - 1:ref_ins_end + hom_find_len],
+                                                                        ref_len, ref_ins_len, sv_id, qryworkdir)
 
         if is_find_ins_qry:
             qry_ins_len = qry_ins_end - qry_ins_start + 1 
-            qry_ins_lef_hom, qry_ins_lef_hom_seq  = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end].reverse,
-                                                   ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
-                                                   qry_len, qry_ins_len, sv_id, qryworkdir)
+            qry_ins_lef_hom, qry_ins_lef_hom_seq = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end].reverse,
+                                                                        ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len].reverse,
+                                                                        qry_len, qry_ins_len, sv_id, qryworkdir)
             
             qry_ins_rht_hom, qry_ins_rht_hom_seq = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len],
-                                                   ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
-                                                   qry_len, qry_ins_len, sv_id, qryworkdir)
+                                                                        ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
+                                                                        qry_len, qry_ins_len, sv_id, qryworkdir)
         
         dsbr_chrom, dsbr_start, dsbr_end, left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_ins_chrom, ref_ins_start, ref_ins_end, ref_ins_lef_hom, ref_ins_rht_hom, ref_ins_lef_hom_seq, ref_ins_rht_hom_seq) \
-                                                                                       if ref_ins_lef_hom + ref_ins_rht_hom + (ref_len > qry_len) - 0.5 > qry_ins_lef_hom + qry_ins_rht_hom else \
-                                                                                       (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom, qry_ins_lef_hom_seq, qry_ins_rht_hom_seq)
-        if left_hom + right_hom < diff_locus_hom_baseline:
+                                                                                             if bool(ref_ins_lef_hom * ref_ins_rht_hom) * (ref_ins_lef_hom + ref_ins_rht_hom + bool(ref_len > qry_len) - 0.5) > bool(qry_ins_lef_hom * qry_ins_rht_hom) * (qry_ins_lef_hom + qry_ins_rht_hom) else \
+                                                                                             (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom, qry_ins_lef_hom_seq, qry_ins_rht_hom_seq)
+        if left_hom + right_hom < diff_locus_hom_baseline or left_hom * right_hom == 0:
             dsb_repair_type = 'SUB_UNIQUE_NO_HOM'
         else:
             dsb_repair_type = 'DIFF_LOCUS_DSBR'
@@ -388,9 +391,6 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
 
 
 def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3):
-    if sv_data[2] not in {'DEL', 'INS', 'SUB'}:
-        return sv_data[0], 'UNSUP_ID'
-
     sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq = (None,) * 10
     sv_id, _, cor_id, chrom, ref_start, ref_end, qry_start, qry_end = sv_data
 
@@ -414,8 +414,8 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
                                                                    
         
         if ref_lef_hom > 0 or qry_lef_hom > 0:
-            dsb_repair_type = 'SUB_HOM_DUP'
             left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_lef_hom, ref_rht_hom, ref_lef_hom_seq, ref_rht_hom_seq) if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom, qry_lef_hom_seq, qry_rht_hom_seq)
+            dsb_repair_type = 'SUB_HOM_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'SUB_HOM_DUP'
 
         else:
             dsb_repair_type = 'SUB_HARD'
@@ -423,25 +423,25 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     else:
         lef_hom = rht_hom = 0
         if cor_id == 'DEL':
-            lef_hom, left_hom_seq = get_one_way_homology(ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end],
-                                           qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end + ref_len],
-                                           hom_find_len, hom_find_len, sv_id, qryworkdir)
+            lef_hom, lef_hom_seq = get_one_way_homology(ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end],
+                                                        qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end + ref_len],
+                                                        hom_find_len, hom_find_len, sv_id, qryworkdir)
             
-            rht_hom, right_hom_seq = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len].reverse,
-                                           qry_seq[chrom][max(0, qry_start - 1 - ref_len):qry_end + hom_find_len].reverse,
-                                           hom_find_len, hom_find_len, sv_id, qryworkdir)
+            rht_hom, rht_hom_seq = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len].reverse,
+                                                        qry_seq[chrom][max(0, qry_start - 1 - ref_len):qry_end + hom_find_len].reverse,
+                                                        hom_find_len, hom_find_len, sv_id, qryworkdir)
 
         else:
-            lef_hom, left_hom_seq = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end],
-                                           ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end + qry_len],
-                                           hom_find_len, hom_find_len, sv_id, qryworkdir)
+            lef_hom, lef_hom_seq = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end],
+                                                        ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end + qry_len],
+                                                        hom_find_len, hom_find_len, sv_id, qryworkdir)
             
-            rht_hom, right_hom_seq = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len].reverse,
-                                           ref_seq[chrom][max(0, ref_start - 1 - qry_len):ref_end + hom_find_len].reverse,
-                                           hom_find_len, hom_find_len, sv_id, qryworkdir)
+            rht_hom, rht_hom_seq = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len].reverse,
+                                                        ref_seq[chrom][max(0, ref_start - 1 - qry_len):ref_end + hom_find_len].reverse,
+                                                        hom_find_len, hom_find_len, sv_id, qryworkdir)
 
         left_hom = lef_hom + rht_hom
-        left_hom_seq = left_hom_seq + right_hom_seq
+        left_hom_seq = lef_hom_seq + rht_hom_seq
 
         if left_hom > (ref_len if cor_id == 'DEL' else qry_len) * 0.9:
             dsb_repair_type = 'HOM_GT_SV_90'
@@ -452,76 +452,144 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     
     return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
-def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr', file=True, num_cpus=1, pbar=True, telegram_token_loc='telegram.json'):
+def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
+                  num_cpus=1, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, sv_loc_list], ['Reference', 'Query', 'Corrected variant'])
     check_unique_basename(qry_loc_list)
 
     # read .fasta file
-    ref_seq = Fasta(ref_loc, build_index=True)
+    ref_seq = Fasta(ref_loc, build_index=False)
     
     if len(qry_loc_list) != len(sv_loc_list):
         raise Exception('The number of query and variant must be same')
 
     # get 1Mbp chromosome
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
+    
+    if not trust_query:
+        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus, pbar=False)
 
-    refdbdir = os.path.join(workdir, 'db')
+    refdbdir = os.path.join(workdir, 'db_gdbr')
     os.makedirs(refdbdir, exist_ok=True)
-    os.makedirs(dsbr_save, exist_ok=True)
+
+    safe_makedirs(dsbr_save, overwrite_output)
+    os.makedirs(os.path.join(dsbr_save, 'bed'))
     
     # split reference .fasta file and makeblastdb per chromosome
     p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
 
     # select cpu proper usage
-    hard_num_cpus, loop_num_cpus = get_proper_thread(len(ref_chr_list) // 2, num_cpus)
+    hard_num_cpus, loop_num_cpus = get_proper_thread(min(len(ref_chr_list), 3), num_cpus)
 
-    logprint(f'Task start : {len(sv_loc_list)} SV detected')
+    logprint(f'Task annotate start : {len(sv_loc_list)} SV detected')
+
+    # for figure data
+    pre_type_cnt = Counter()
+    cor_type_cnt = Counter()
+    
+    del_type_cnt = Counter()
+    ins_type_cnt = Counter()
+    sub_type_cnt = Counter()
+
+    indel_hom_cnt = Counter()
+    temp_ins_hom_cnt = Counter()
+    diff_locus_dsbr_hom_cnt = Counter()
+
+    bed_df = pd.DataFrame()
+    tot_sv_len = 0
+
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
-        qry_seq = Fasta(qry_loc, build_index=True)
-
-        # If there no same chromosone in query and reference
-        qry_chr_list = list(set(ref_chr_list) & set(qry_seq.records.keys()))
-        if qry_chr_list == []:
-            raise Exception('Chromosone name must same')
-        
-        qryworkdir = os.path.join(workdir, str(qry_ind))
+        qryworkdir = os.path.join(workdir, str(qry_ind) + '_gdbr')
         os.makedirs(qryworkdir, exist_ok=True)
 
         sv_list = get_sv_list(sv_loc)
+        tar_sv_list = list(filter(lambda t: t[2] in {'DEL', 'INS', 'SUB'}, sv_list))
+
         hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir,
                                  hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
                                  near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
-                                 sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANT {qry_ind + 1}/{len(qry_loc_list)}')
+                                 tar_sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANT {qry_ind + 1}/{len(qry_loc_list)}')
         
         # check SV to annotate hard mode
         hard_sv_list = []
         for hom in hom_list:
-            if hom[1] == 'SUB' and hom[2] == 'SUB_HARD':
+            if hom[2] == 'SUB_HARD':
                 hard_sv_list.append(sv_list[hom[0]])
 
         hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
                                       ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline,
                                       diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
-                                      hard_sv_list, pbar=pbar, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANH {qry_ind + 1}/{len(qry_loc_list)}')
+                                      hard_sv_list, pbar=False, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc)
         
-        for hom in hard_hom_list:
-            hom_list[hom[0]] = hom
+        hard_hom_list.reverse()
+        for ind, hom in enumerate(hom_list):
+            if hom[2] == 'SUB_HARD':
+                hom_list[ind] = hard_hom_list.pop()
+
+        # figure count
+        tot_sv_len += len(sv_list)
+        for sv in sv_list:
+            pre_type_cnt[sv[1]] += 1
+            cor_type_cnt[sv[2]] += 1
+        
+        for hom in hom_list:
+            cor_id = hom[1]
+            dsb_repair_type = hom[2]
+
+            if cor_id == 'DEL':
+                del_type_cnt[dsb_repair_type] += 1
+            elif cor_id == 'INS':
+                ins_type_cnt[dsb_repair_type] += 1
+            elif cor_id == 'SUB':
+                sub_type_cnt[dsb_repair_type] += 1
+
+            if dsb_repair_type == 'HOM':
+                indel_hom_cnt[hom[3]] += 1
+            elif dsb_repair_type == 'SUB_HOM_DUP':
+                temp_ins_hom_cnt[hom[3]] += 1
+                temp_ins_hom_cnt[hom[4]] += 1
+            elif dsb_repair_type == 'DIFF_LOCUS_DSBR':
+                diff_locus_dsbr_hom_cnt[hom[3]] += 1
+                diff_locus_dsbr_hom_cnt[hom[4]] += 1
+
+        hom_list.reverse()
 
         output_data = []
-        for sv, hom in zip(sv_list, hom_list):
-            sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[2:]
-            if sv[1] in {'DEL', 'INS', 'SUB'}:
-                output_data.append(sv + list(hom)[2:])
+        bed_data_list = []
+        for sv in sv_list:
+            sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
+            if sv[2] in {'DEL', 'INS', 'SUB'}:
+                hom = list(hom_list.pop())
+                if hom[3] is None:
+                    hom_str = '*'
+                elif hom[4] is None:
+                    hom_str = str(hom[3])
+                else:
+                    hom_str = f'{hom[3]}:{hom[4]}'
+                
+                bed_data_list.append((sv[3], sv[4] - 1, sv[5], sv[0], hom[2], hom_str))
+                output_data.append(sv + hom[2:])
             else:
                 output_data.append(sv)
+        
+        qry_basename = os.path.basename(qry_loc)
+        with open(os.path.join(dsbr_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.result.tsv', 'w') as f:
+            tf = csv.writer(f, delimiter='\t')
+            tf.writerow(('ID', 'CALL_TYPE','SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ'))
+            tf.writerows(output_data)
+        
+        # save bed file
+        tdf = pd.DataFrame(bed_data_list)
+        tdf.to_csv(os.path.join(dsbr_save, 'bed', remove_gdbr_postfix(qry_basename)) + '.GDBr.result.bed', header=False, sep='\t', index=False)
+        bed_df = pd.concat([bed_df, tdf])
 
         logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} annotate complete')
-        
-        if file:
-            qry_basename = os.path.basename(qry_loc)
-            with open(os.path.join(dsbr_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.result.tsv', 'w') as f:
-                tf = csv.writer(f, delimiter='\t')
-                tf.writerow(('ID', 'SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ'))
-                tf.writerows(output_data)
-        else:
-            return output_data
+  
+    # draw figure
+    os.makedirs(os.path.join(dsbr_save, 'figure'))
+    draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
+                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list))
+    
+    # export merge bed file
+    if len(qry_loc_list) > 1:
+        bed_df.groupby([0, 1, 2, 4, 5], as_index=False).agg(lambda x: ';'.join(sorted(set(x)))).to_csv(os.path.join(dsbr_save, 'bed', 'merge') + '.GDBr.result.bed', header=False, sep='\t', index=False)
