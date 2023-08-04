@@ -57,9 +57,9 @@ gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDB
 | QRY_END           | variant query end location                           |
 | REPAIR_TYPE       | DSBR mechanism type                                  |
 | HOM_LEN/HOM_START_LEN | INDEL : homology length / SUB : left homology length |
-| HOM_END_LEN           | right homology length                                |
+| HOM_END_LEN           | SUB : right homology length                                |
 | DSBR_CHR          | different locus DSBR chromosome                      |
 | DSBR_START        | different locus DSBR start                           |
 | DSBR_END          | different locus DSBR end                             |
 | HOM_SEQ/HOM_START_SEQ | INDEL : homology sequence / SUB : left homology sequence|
-| HOM_END_SEQ           | right homology sequence                              |
+| HOM_END_SEQ           | SUB : right homology sequence                              |
