@@ -339,16 +339,18 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
         rpm_output_loc, output_postfix = (rpm_temp_seq_loc + '.cat', '.cat') if os.path.isfile(rpm_temp_seq_loc + '.cat') else (rpm_temp_seq_loc + '.cat.gz', '.cat.gz')
         subprocess.run(['ProcessRepeats', '-spec', species, '-gff', rpm_output_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=workdir)
         
-        with open(rpm_temp_seq_loc + '.out.gff', 'r') as f:
-            tf = csv.reader(f, delimiter='\t')
-            rpm_list = [l for l in tf]
+        if os.path.isfile(rpm_temp_seq_loc + '.out.gff'):
+            with open(rpm_temp_seq_loc + '.out.gff', 'r') as f:
+                tf = csv.reader(f, delimiter='\t')
+                rpm_list = [l for l in tf]
 
-        for rpm in rpm_list:
-            if rpm[0][0] != '#':
-                sv_list[int(rpm[0].split('.')[0])][2] = 'REPEAT:RPM'
-        
+            for rpm in rpm_list:
+                if rpm[0][0] != '#':
+                    sv_list[int(rpm[0].split('.')[0])][2] = 'REPEAT:RPM'
+            
         for postfix in ['', output_postfix, '.out', '.out.gff', '.tbl']:
-            os.remove(rpm_temp_seq_loc + postfix)
+            if os.path.isfile(rpm_temp_seq_loc + postfix):
+                os.remove(rpm_temp_seq_loc + postfix)
 
         qry_basename = os.path.basename(qry_loc)
         with open(os.path.join(sv_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.correct.csv', 'w') as f:
