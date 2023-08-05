@@ -473,7 +473,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     os.makedirs(refdbdir, exist_ok=True)
 
     safe_makedirs(dsbr_save, overwrite_output)
-    os.makedirs(os.path.join(dsbr_save, 'bed'))
+    os.makedirs(os.path.join(dsbr_save, 'bed'), exist_ok=True)
     
     # split reference .fasta file and makeblastdb per chromosome
     p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
@@ -586,7 +586,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
         logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} annotate complete')
   
     # draw figure
-    os.makedirs(os.path.join(dsbr_save, 'figure'))
+    os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
     draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
                 indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list))
     

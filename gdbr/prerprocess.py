@@ -35,7 +35,7 @@ def preprocess_pipeline(qry_loc, ref_loc, log_save, qry_save, var_save, workdir,
         f.writelines(vcf_str_list)
 
 
-def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='data', min_sv_size=50, num_cpus=1, low_memory=False, trust=False, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False):
+def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='data', min_sv_size=50, num_cpus=1, low_memory=False, trust_workdir=False, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False):
     check_file_exist([[ref_loc], qry_loc_list], ['Reference', 'Raw query'])
     check_unique_basename(qry_loc_list)
     
@@ -45,7 +45,7 @@ def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='da
     qry_save = os.path.join(preprocess_save, 'query')
     var_save = os.path.join(preprocess_save, 'vcf')
 
-    if not trust:
+    if not trust_workdir:
         safe_makedirs(workdir)
     
     os.makedirs(qry_save, exist_ok=True)
@@ -56,12 +56,12 @@ def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='da
     if low_memory:
         preprocess_num_cpus, loop_num_cpus = num_cpus, 1
     else:
-        preprocess_num_cpus, loop_num_cpus = get_proper_thread(1 if trust else 4, num_cpus, len(qry_loc_list))
+        preprocess_num_cpus, loop_num_cpus = get_proper_thread(1 if trust_workdir else 4, num_cpus, len(qry_loc_list))
     
     logprint(f'Task preprocess start : {len(qry_loc_list)} query detected')
 
     p_map(partial(preprocess_pipeline, ref_loc=ref_loc, log_save=log_save, qry_save=qry_save, var_save=var_save, 
-                  workdir=workdir, min_sv_size=min_sv_size, num_cpus=preprocess_num_cpus, trust=trust),
+                  workdir=workdir, min_sv_size=min_sv_size, num_cpus=preprocess_num_cpus, trust_workdir=trust_workdir),
                   qry_loc_list, pbar=pbar, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc, desc='PRE')
     
-    logprint(f'{"Trust preprocess" if trust else "Preprocess"} complete')
+    logprint(f'{"Trust preprocess" if trust_workdir else "Preprocess"} complete')
