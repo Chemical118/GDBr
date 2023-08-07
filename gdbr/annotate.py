@@ -590,4 +590,4 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     
     # export merge bed file
     if len(qry_loc_list) > 1:
-        bed_df.groupby([0, 1, 2, 3, 4], as_index=False).agg({5: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))}).to_csv(os.path.join(dsbr_save, 'bed', 'merge') + '.GDBr.result.bed', header=False, sep='\t', index=False)
+        bed_df.groupby([0, 1, 2, 3, 4, 5], as_index=False).agg({6: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))}).to_csv(os.path.join(dsbr_save, 'bed', 'total.GDBr.merge_result.bed'), header=False, sep='\t', index=False)
