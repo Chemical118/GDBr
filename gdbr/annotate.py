@@ -338,11 +338,16 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
     ref_len = ref_end - ref_start + 1
     qry_len = qry_end - qry_start + 1
 
-    ref_ins_chrom, ref_ins_start, ref_ins_end = get_non_homology_insertion_loaction(ref_seq[chrom][ref_start - 1:ref_end], near_seq_kb_baseline,
-                                                                                    refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
-        
-    qry_ins_chrom, qry_ins_start, qry_ins_end = get_non_homology_insertion_loaction(qry_seq[chrom][qry_start - 1:qry_end], near_seq_kb_baseline,
-                                                                                    refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
+    ref_ins_chrom, qry_ins_chrom = False, False
+
+    # megablast word_size
+    if ref_len >= 28:
+        ref_ins_chrom, ref_ins_start, ref_ins_end = get_non_homology_insertion_loaction(ref_seq[chrom][ref_start - 1:ref_end], near_seq_kb_baseline,
+                                                                                        refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
+            
+    if qry_len >= 28:
+        qry_ins_chrom, qry_ins_start, qry_ins_end = get_non_homology_insertion_loaction(qry_seq[chrom][qry_start - 1:qry_end], near_seq_kb_baseline,
+                                                                                        refdbdir, sv_id, chrom, qryworkdir, ref_start, ref_end, ref_chr_list, num_cpus)
     
     is_find_ins_ref = isinstance(ref_ins_chrom, str)
     is_find_ins_qry = isinstance(qry_ins_chrom, str)
@@ -560,14 +565,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
             sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
             if sv[2] in {'DEL', 'INS', 'SUB'}:
                 hom = list(hom_list.pop())
-                if hom[3] is None:
-                    hom_str = '*'
-                elif hom[4] is None:
-                    hom_str = str(hom[3])
-                else:
-                    hom_str = f'{hom[3]}:{hom[4]}'
-                
-                bed_data_list.append((sv[3], sv[4] - 1, sv[5], sv[0], hom[2], hom_str))
+                bed_data_list.append((sv[3], sv[4] - 1, sv[5], hom[2], -1 if hom[3] is None else hom[3], -1 if hom[4] is None else hom[4], sv[0]))
                 output_data.append(sv + hom[2:])
             else:
                 output_data.append(sv)
@@ -592,4 +590,4 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     
     # export merge bed file
     if len(qry_loc_list) > 1:
-        bed_df.groupby([0, 1, 2, 4, 5], as_index=False).agg(lambda x: ';'.join(sorted(set(x)))).to_csv(os.path.join(dsbr_save, 'bed', 'merge') + '.GDBr.result.bed', header=False, sep='\t', index=False)
+        bed_df.groupby([0, 1, 2, 3, 4], as_index=False).agg({5: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))}).to_csv(os.path.join(dsbr_save, 'bed', 'merge') + '.GDBr.result.bed', header=False, sep='\t', index=False)

@@ -522,7 +522,7 @@ def get_min_sv_size(vcf_loc):
 
 def clean_workdir(workdir):
     for item in os.listdir(workdir):
-        if os.path.isdir(os.path.join(workdir, item)) and item[-5:] == '_gdbr' and (item[:-5] == 'db' or item[:-5].isdigit()):
+        if os.path.isdir(os.path.join(workdir, item)) and item[-5:] == '_gdbr' and (item[:-5] == 'db' or item[:-5].isdecimal()):
             shutil.rmtree(os.path.join(workdir, item))
 
     if len(os.listdir(workdir)) == 0:
@@ -750,7 +750,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             s = sns.histplot(x=temp_ins_hom_cnt.keys(), weights=temp_ins_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
             s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
         ax_list[0].set_title('Templated insertion respective homology distribution')
-        save_fig(fig, savedir, 'temp_ins_hom_distribution')
+        save_fig(fig, savedir, 'result_temp_ins_hom_distribution')
 
     # Different locus DSBR respective homology distribution
     if diff_locus_dsbr_hom_cnt:
@@ -759,4 +759,4 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             s = sns.histplot(x=diff_locus_dsbr_hom_cnt.keys(), weights=diff_locus_dsbr_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
             s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
         ax_list[0].set_title('Different locus DSBR respective homology distribution')
-        save_fig(fig, savedir, 'diff_locus_dsbr_hom_distribution')
+        save_fig(fig, savedir, 'result_diff_locus_dsbr_hom_distribution')
