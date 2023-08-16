@@ -420,7 +420,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
         
         if ref_lef_hom > 0 or qry_lef_hom > 0:
             left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_lef_hom, ref_rht_hom, ref_lef_hom_seq, ref_rht_hom_seq) if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom, qry_lef_hom_seq, qry_rht_hom_seq)
-            dsb_repair_type = 'SUB_HOM_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'SUB_HOM_DUP'
+            dsb_repair_type = 'TEMP_INS_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'TEMP_INS'
 
         else:
             dsb_repair_type = 'SUB_NOT_SPECIFIED'
@@ -509,7 +509,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
         sv_list = get_sv_list(sv_loc)
         tar_sv_list = list(filter(lambda t: t[2] in {'DEL', 'INS', 'SUB'}, sv_list))
-
+        
         hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir,
                                  hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
                                  near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
@@ -551,7 +551,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
             if dsb_repair_type == 'HOM':
                 indel_hom_cnt[hom[3]] += 1
-            elif dsb_repair_type == 'SUB_HOM_DUP':
+            elif dsb_repair_type == 'TEMP_INS':
                 temp_ins_hom_cnt[hom[3]] += 1
                 temp_ins_hom_cnt[hom[4]] += 1
             elif dsb_repair_type == 'DIFF_LOCUS_DSBR':

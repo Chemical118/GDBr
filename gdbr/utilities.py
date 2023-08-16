@@ -622,14 +622,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                         ('REPEAT', 7),
                         ('EXCEPT', 6),
                         ('HOM', 0),
-                        ('HOM_GT_SV_90', 1),
-                        ('NO_HOM', 6),
-                        ('SUB_HOM_DUP', 0),
-                        ('SUB_HOM_GT_SV_90', 1),
+                        ('HOM_GT_SV_90', 6),
+                        ('NO_HOM', 1),
+                        ('TEMP_INS', 0),
+                        ('TEMP_INS_GT_SV_90', 6),
                         ('DIFF_LOCUS_DSBR', 2),
                         ('SUB_UNIQUE_NO_HOM', 3),
                         ('SUB_REPEAT', 8),
-                        ('SUB_NOT_SPECIFIED', 7),
+                        ('SUB_NOT_SPECIFIED', 1),
                         ('REPEAT:TRF_FIRST', 7),
                         ('REPEAT:BLAST', 5),
                         ('REPEAT:TRF_LAST', 4),
@@ -746,7 +746,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     # Substitution classification
     cnt = sub_type_cnt
-    target_list = ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_UNIQUE_NO_HOM', 'DIFF_LOCUS_DSBR', 'SUB_REPEAT', 'SUB_NOT_SPECIFIED'] if diff_locus_dsbr_analysis else ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_NOT_SPECIFIED']
+    target_list = ['TEMP_INS', 'DIFF_LOCUS_DSBR', 'SUB_UNIQUE_NO_HOM', 'SUB_NOT_SPECIFIED', 'SUB_REPEAT', 'TEMP_INS_GT_SV_90'] if diff_locus_dsbr_analysis else ['TEMP_INS', 'SUB_NOT_SPECIFIED', 'TEMP_INS_GT_SV_90']
     target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
@@ -841,11 +841,11 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     # Draw chromosome distribution
     merge_bed_df.columns = ['chrom', 'st', 'nd', 'gdbr_type', 'hom_l', 'hom_r', 'merge_id']
     merge_bed_df['sv_loc'] = [round(i) for i in (merge_bed_df['st'] + merge_bed_df['nd']) / 2]
-    merge_bed_df['Homology type'] = ['Homology' if i in {'HOM', 'SUB_HOM_DUP'} else 'No homology' for i in merge_bed_df['gdbr_type']]
+    merge_bed_df['Homology type'] = ['Homology' if i in {'HOM', 'TEMP_INS'} else 'No homology' for i in merge_bed_df['gdbr_type']]
     if a_ej_baseline is not None:
         dsb_repair_type_list = []
         for gt, h in zip(merge_bed_df['gdbr_type'], merge_bed_df['hom_l']):
-            if gt == 'SUB_HOM_DUP':
+            if gt == 'TEMP_INS':
                 dsb_repair_type_list.append('a-EJ')
             elif gt == 'HOM':
                 if h <= a_ej_baseline:
