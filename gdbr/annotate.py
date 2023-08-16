@@ -583,14 +583,13 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
         merge_bed_df = pd.concat([merge_bed_df, tdf])
 
         logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} annotate complete')
-    # merge bed data
+
+    # export merge bed file
     merge_bed_df = merge_bed_df.groupby([0, 1, 2, 3, 4, 5], as_index=False).agg({6: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))})
+    if len(qry_loc_list) > 1:
+        merge_bed_df.to_csv(os.path.join(dsbr_save, 'bed', 'total.GDBr.merge_result.bed'), header=False, sep='\t', index=False)
 
     # draw figure
     os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
     draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
                 indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list), diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
-    
-    # export merge bed file
-    if len(qry_loc_list) > 1:
-        merge_bed_df.to_csv(os.path.join(dsbr_save, 'bed', 'total.GDBr.merge_result.bed'), header=False, sep='\t', index=False)
