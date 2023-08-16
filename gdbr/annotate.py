@@ -423,7 +423,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
             dsb_repair_type = 'SUB_HOM_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'SUB_HOM_DUP'
 
         else:
-            dsb_repair_type = 'SUB_HARD'
+            dsb_repair_type = 'SUB_NOT_SPECIFIED'
 
     else:
         lef_hom = rht_hom = 0
@@ -457,7 +457,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     
     return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
-def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
+def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
                   num_cpus=1, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, sv_loc_list], ['Reference', 'Query', 'Corrected variant'])
     check_unique_basename(qry_loc_list)
@@ -500,7 +500,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
     temp_ins_hom_cnt = Counter()
     diff_locus_dsbr_hom_cnt = Counter()
 
-    bed_df = pd.DataFrame()
+    merge_bed_df = pd.DataFrame()
     tot_sv_len = 0
 
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
@@ -515,21 +515,22 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
                                  near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
                                  tar_sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANT {qry_ind + 1}/{len(qry_loc_list)}')
         
-        # check SV to annotate hard mode
-        hard_sv_list = []
-        for hom in hom_list:
-            if hom[2] == 'SUB_HARD':
-                hard_sv_list.append(sv_list[hom[0]])
+        if diff_locus_dsbr_analysis:
+            # check SV to annotate hard mode
+            hard_sv_list = []
+            for hom in hom_list:
+                if hom[2] == 'SUB_NOT_SPECIFIED':
+                    hard_sv_list.append(sv_list[hom[0]])
 
-        hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
-                                      ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline,
-                                      diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
-                                      hard_sv_list, pbar=False, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc)
-        
-        hard_hom_list.reverse()
-        for ind, hom in enumerate(hom_list):
-            if hom[2] == 'SUB_HARD':
-                hom_list[ind] = hard_hom_list.pop()
+            hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
+                                          ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline,
+                                          diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
+                                          hard_sv_list, pbar=False, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc)
+            
+            hard_hom_list.reverse()
+            for ind, hom in enumerate(hom_list):
+                if hom[2] == 'SUB_NOT_SPECIFIED':
+                    hom_list[ind] = hard_hom_list.pop()
 
         # figure count
         tot_sv_len += len(sv_list)
@@ -579,15 +580,17 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, temp_in
         # save bed file
         tdf = pd.DataFrame(bed_data_list)
         tdf.to_csv(os.path.join(dsbr_save, 'bed', remove_gdbr_postfix(qry_basename)) + '.GDBr.result.bed', header=False, sep='\t', index=False)
-        bed_df = pd.concat([bed_df, tdf])
+        merge_bed_df = pd.concat([merge_bed_df, tdf])
 
         logprint(f'{qry_ind + 1}/{len(qry_loc_list)} : {os.path.basename(qry_loc)} annotate complete')
-  
+    # merge bed data
+    merge_bed_df = merge_bed_df.groupby([0, 1, 2, 3, 4, 5], as_index=False).agg({6: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))})
+
     # draw figure
     os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
     draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list))
+                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list), diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
     
     # export merge bed file
     if len(qry_loc_list) > 1:
-        bed_df.groupby([0, 1, 2, 3, 4, 5], as_index=False).agg({6: lambda x: ';'.join(sorted(set(x), key=lambda t: int(t.split('.')[1])))}).to_csv(os.path.join(dsbr_save, 'bed', 'total.GDBr.merge_result.bed'), header=False, sep='\t', index=False)
+        merge_bed_df.to_csv(os.path.join(dsbr_save, 'bed', 'total.GDBr.merge_result.bed'), header=False, sep='\t', index=False)

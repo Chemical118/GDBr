@@ -15,7 +15,7 @@ from datetime import datetime
 
 def analysis_main(ref_loc, qry_loc_list, species, output='gdbr_output', workdir='data', pre_min_sv_size=50, num_cpus=1, low_memory=False, trust_workdir=False,
                   sv_find_len=2000, repeat_find_len=50, cor_min_sv_size=50,
-                  hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, 
+                  hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, 
                   pbar=True, telegram_token_loc='telegram.json', overwrite_output=False):
     
     safe_makedirs(output)
@@ -30,7 +30,7 @@ def analysis_main(ref_loc, qry_loc_list, species, output='gdbr_output', workdir=
     
     dsbr_save = os.path.join(output, 'result')
     sv_loc_list = sorted(glob.glob(os.path.join(sv_save, '*.GDBr.correct.csv')))
-    annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len, near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline, diff_locus_hom_baseline=diff_locus_hom_baseline, workdir=workdir, dsbr_save=dsbr_save, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, overwrite_output=overwrite_output, trust_query=True)
+    annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=hom_find_len, diff_locus_dsbr_analysis=diff_locus_dsbr_analysis, temp_indel_find_len=temp_indel_find_len, near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline, near_seq_kb_baseline=near_seq_kb_baseline, diff_locus_hom_baseline=diff_locus_hom_baseline, workdir=workdir, dsbr_save=dsbr_save, num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, overwrite_output=overwrite_output, trust_query=True)
 
 
 def benchmark_main(arg):
@@ -108,7 +108,7 @@ def main():
         analysis_main(arg.reference, arg.query, arg.species, output=arg.output, num_cpus=arg.threads,
                       workdir=arg.workdir, pre_min_sv_size=pre_min_sv_size, low_memory=arg.low_memory, trust_workdir=arg.trust_workdir,
                       sv_find_len=arg.sv_find_len, repeat_find_len=arg.repeat_find_len, cor_min_sv_size=cor_min_sv_size,
-                      hom_find_len=arg.hom_find_len, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
+                      hom_find_len=arg.hom_find_len, diff_locus_dsbr_analysis=arg.diff_locus_dsbr_analysis, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
                       user_gap_baseline=arg.temp_gap_baseline, near_seq_kb_baseline=arg.near_sv_kb_baseline, diff_locus_hom_baseline=arg.diff_locus_hom_baseline,
                       pbar=pbar, telegram_token_loc=arg.telegram_data_loc, overwrite_output=arg.overwrite_output)
 
@@ -123,7 +123,7 @@ def main():
 
     elif arg.command == 'annotate':
         annotate_main(arg.reference, arg.query, arg.sv_csv, dsbr_save=arg.result_save, num_cpus=arg.threads,
-                      hom_find_len=arg.hom_find_len, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
+                      hom_find_len=arg.hom_find_len, diff_locus_dsbr_analysis=arg.diff_locus_dsbr_analysis, temp_indel_find_len=arg.temp_indel_find_len, near_gap_find_len=arg.near_gap_find_len,
                       user_gap_baseline=arg.temp_gap_baseline, near_seq_kb_baseline=arg.near_sv_kb_baseline, diff_locus_hom_baseline=arg.diff_locus_hom_baseline,
                       workdir=arg.workdir, pbar=pbar, telegram_token_loc=arg.telegram_data_loc, overwrite_output=arg.overwrite_output)
     

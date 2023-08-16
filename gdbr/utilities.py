@@ -1,3 +1,5 @@
+from statsmodels.nonparametric.kernel_regression import KernelReg
+from matplotlib.ticker import MaxNLocator
 from tqdm.contrib.telegram import tqdm
 from pathos.pools import ProcessPool
 from gdbr.version import get_version
@@ -5,6 +7,7 @@ from pyfaidx import Fasta
 
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
 import pandas as pd
 
 import subprocess
@@ -13,6 +16,7 @@ import datetime
 import p_tqdm
 import shutil
 import vcfpy
+import math
 import json
 import glob
 import os
@@ -180,6 +184,10 @@ def gdbr_parser():
                                type=int,
                                default=2000,
                                help='sequence length to find DSBR')
+
+    ao_parser_anl.add_argument('--diff_locus_dsbr_analysis',
+                               action='store_true',
+                               help='turn on different locus DSBR analysis (Warning : analysis can give false positives due to partial homology on the sex chromosomes)')
 
     ao_parser_anl.add_argument('--temp_indel_find_len',
                                type=int,
@@ -395,6 +403,10 @@ def gdbr_parser():
                                default=2000,
                                help='sequence length to find DSBR')
 
+    op_parser_ant.add_argument('--diff_locus_dsbr_analysis',
+                               action='store_true',
+                               help='turn on different locus DSBR analysis (Warning : analysis can give false positives due to partial homology on the sex chromosomes)')
+
     op_parser_ant.add_argument('--temp_indel_find_len',
                                type=int,
                                default=100,
@@ -576,9 +588,26 @@ def saferound(v, d=0, md=5):
     return r
 
 
+def extract_number(s):
+    i = len(s) - 1
+    while i >= 0:
+        if not s[i].isdigit():
+            break
+        i -= 1
+    
+    if i < len(s) - 1:
+        return int(s[i + 1:])
+    else:
+        return None
+
+
+def get_chrom_order(s):
+    n = extract_number(s)
+    return n is None, n, s
+
+
 def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, query_num):
-    # Default setting
+                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, query_num, diff_locus_dsbr_analysis, ref_seq, merge_bed_df):
     legend_fontsize = 8.5
     width = 0.17
 
@@ -717,7 +746,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     # Substitution classification
     cnt = sub_type_cnt
-    target_list = ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_UNIQUE_NO_HOM', 'DIFF_LOCUS_DSBR', 'SUB_REPEAT', 'SUB_NOT_SPECIFIED']
+    target_list = ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_UNIQUE_NO_HOM', 'DIFF_LOCUS_DSBR', 'SUB_REPEAT', 'SUB_NOT_SPECIFIED'] if diff_locus_dsbr_analysis else ['SUB_HOM_DUP', 'SUB_HOM_GT_SV_90', 'SUB_NOT_SPECIFIED']
     target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
@@ -736,10 +765,58 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     # Indel homology distribution
     if indel_hom_cnt:
+        indel_hom_cnt_data = np.array(list(filter(lambda t: 10 <= t[0] <= 60, indel_hom_cnt.items())))
+
+        x, y = indel_hom_cnt_data[:, 0], indel_hom_cnt_data[:, 1]
+        kernel_reg = KernelReg(y, x, var_type='c', bw=[2])
+
+        pre_gap = 0.1
+        pre_x = np.arange(np.min(x), np.max(x) + 1, pre_gap)
+        pre_y = kernel_reg.fit(pre_x)[0]
+
+        slp_y = np.diff(pre_y)
+        slp_x = pre_x[:-1] + pre_gap / 2
+
+        ans_x, pos_x, ans_range = None, None, 1
+        for i, (sx, sy) in enumerate(zip(slp_x, slp_y)):
+            if pos_x is None:
+                if sy > 0:
+                    pos_x = sx
+            else:
+                if sy < 0 or i == np.size(slp_x) - 1:
+                    if sx - pos_x > ans_range:
+                        ans_x = pos_x
+                        ans_range = sx - pos_x
+                    pos_x = None
+
+        a_ej_baseline = None if ans_x is None else math.trunc(ans_x)
+
         fig, ax_list = plt.subplots(3, 1, figsize=(6.4, 14.4))
-        for tar_range, ax in zip([(1, 200), (1, 30), (15, 200)], ax_list):
-            s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
+        for tar_range, ax in zip([(1, 200), (1, 30)], ax_list):
+            s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', alpha=1, ax=ax)
             s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+
+        ax = ax_list[2]
+        s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=(15, 200), binwidth=1, element='step', alpha=1, ax=ax)
+        s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+        if a_ej_baseline is not None:
+            ax.text(a_ej_baseline - 2, ax.get_ylim()[1] * 0.99, 'a-EJ',
+                    color='red',
+                    horizontalalignment='right',
+                    verticalalignment='top')
+
+            ax.text(a_ej_baseline + 2, ax.get_ylim()[1] * 0.99, 'SSA',
+                    color='red',
+                    horizontalalignment='left',
+                    verticalalignment='top')
+
+            ax.text(a_ej_baseline, ax.get_ylim()[1], f'{a_ej_baseline}bp',
+                    color='red',
+                    horizontalalignment='center',
+                    verticalalignment='bottom')
+
+            ax.axvline(x=a_ej_baseline, color='red', linestyle='dashed')
+
         ax_list[0].set_title('Indel homology distribution')
         save_fig(fig, savedir, 'result_indel_hom_distribution')
 
@@ -760,3 +837,142 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
         ax_list[0].set_title('Different locus DSBR respective homology distribution')
         save_fig(fig, savedir, 'result_diff_locus_dsbr_hom_distribution')
+    
+    # Draw chromosome distribution
+    merge_bed_df.columns = ['chrom', 'st', 'nd', 'gdbr_type', 'hom_l', 'hom_r', 'merge_id']
+    merge_bed_df['sv_loc'] = [round(i) for i in (merge_bed_df['st'] + merge_bed_df['nd']) / 2]
+    merge_bed_df['Homology type'] = ['Homology' if i in {'HOM', 'SUB_HOM_DUP'} else 'No homology' for i in merge_bed_df['gdbr_type']]
+    if a_ej_baseline is not None:
+        dsb_repair_type_list = []
+        for gt, h in zip(merge_bed_df['gdbr_type'], merge_bed_df['hom_l']):
+            if gt == 'SUB_HOM_DUP':
+                dsb_repair_type_list.append('a-EJ')
+            elif gt == 'HOM':
+                if h <= a_ej_baseline:
+                    dsb_repair_type_list.append('a-EJ')
+                else:
+                    dsb_repair_type_list.append('SSA')
+            else:
+                dsb_repair_type_list.append('No homology')
+
+        merge_bed_df['DSB repair type'] = dsb_repair_type_list
+
+    chr_list = sorted(set(merge_bed_df['chrom']), key=get_chrom_order)
+    chr_res_df_data = [(merge_bed_df.query(f'chrom == "{chrom}"'), chrom, len(ref_seq[chrom])) for chrom in chr_list]
+
+    linewidth = 1
+    binwidth = round(sum(len(ref_seq[chrom]) for chrom in chr_list) / 5000)
+    nrows, ncols = len(chr_res_df_data), 2
+
+    fig, ax_array = plt.subplots(nrows=nrows + 1, ncols=ncols, figsize=(12 * ncols, 0.02 + 4 * nrows), gridspec_kw={"height_ratios" : [0.02] + [4] * nrows}, layout="constrained")
+
+    fig.suptitle('Homology - no homology chromosome distribution', fontweight='bold')
+
+    ax = ax_array[0, 0]
+    ax.axis('off')
+    ax.set_title('Variant count histogram')
+
+    ax = ax_array[0, 1]
+    ax.axis('off')
+    ax.set_title('Variant relative frequency histogram')
+
+    hue, hue_order = 'Homology type', ['Homology', 'No homology']
+    for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
+        ax = ax_array[i + 1, 0]
+        sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), xlabel='Variant location (bp)', ylabel='Variant count')
+        if i == 0:
+            sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+        else:
+            ax.get_legend().remove()
+        
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+        ax = ax_array[i + 1, 1]
+        sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+        if i == 0:
+            sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+        else:
+            ax.get_legend().remove()
+
+        for line2d in ax.lines:
+            y = line2d.get_ydata()
+            line2d.set_ydata(y / np.max(y))
+
+    save_fig(fig, savedir, 'result_chrom_hom_no_hom_distribution')
+
+    if a_ej_baseline is not None:
+        fig, ax_array = plt.subplots(nrows=nrows + 1, ncols=ncols, figsize=(12 * ncols, 0.02 + 4 * nrows), gridspec_kw={"height_ratios" : [0.02] + [4] * nrows}, layout="constrained")
+        fig.suptitle('a-EJ - no homology chromosome distribution', fontweight='bold')
+
+        ax = ax_array[0, 0]
+        ax.axis('off')
+        ax.set_title('Variant count histogram')
+
+        ax = ax_array[0, 1]
+        ax.axis('off')
+        ax.set_title('Variant relative frequency histogram')
+
+        hue, hue_order = 'DSB repair type', ['a-EJ', 'No homology']
+        for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
+            ax = ax_array[i + 1, 0]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+            if i == 0:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+            else:
+                ax.get_legend().remove()
+            
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+            ax = ax_array[i + 1, 1]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            if i == 0:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+            else:
+                ax.get_legend().remove()
+
+            for line2d in ax.lines:
+                y = line2d.get_ydata()
+                line2d.set_ydata(y / np.max(y))
+
+        save_fig(fig, savedir, 'result_chrom_a_ej_no_hom_distribution')
+
+        fig, ax_array = plt.subplots(nrows=nrows + 1, ncols=ncols, figsize=(12 * ncols, 0.02 + 4 * nrows), gridspec_kw={"height_ratios" : [0.02] + [4] * nrows}, layout="constrained")
+        fig.suptitle('a-EJ - no homology - SSA chromosome distribution', fontweight='bold')
+
+        ax = ax_array[0, 0]
+        ax.axis('off')
+        ax.set_title('Variant count histogram')
+
+        ax = ax_array[0, 1]
+        ax.axis('off')
+        ax.set_title('Variant relative frequency histogram')
+
+        hue, hue_order = 'DSB repair type', ['a-EJ', 'No homology', 'SSA']
+        for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
+            ax = ax_array[i + 1, 0]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+            if i == 0:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+            else:
+                ax.get_legend().remove()
+            
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+            ax = ax_array[i + 1, 1]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            if i == 0:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+            else:
+                ax.get_legend().remove()
+
+            for line2d in ax.lines:
+                y = line2d.get_ydata()
+                line2d.set_ydata(y / np.max(y))
+
+        save_fig(fig, savedir, 'result_chrom_a_ej_no_hom_ssa_distribution')

@@ -27,6 +27,7 @@ jobs:
             pyfaidx
             requests
             vcfpy
+            statsmodels
           cache-environment: true
           cache-downloads: false
             

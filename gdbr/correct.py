@@ -271,6 +271,38 @@ def get_vcf_tot_data(vcf_loc, ref_chr_list):
     return vcf_tot_data
 
 
+def prepare_repeatmasker_multiprocessing(ref_seq, qry_seq, sv_list, qryworkdir, num_cpus, repeat_find_len):
+    rpmworkdir_list = []
+    for i, target_ind in enumerate(np.array_split(np.arange(len(sv_list)), num_cpus)):
+        if np.size(target_ind) > 0:
+            rpmworkdir = os.path.join(qryworkdir, f'{i}_rpm')
+            rpmworkdir_list.append(rpmworkdir)
+            os.makedirs(rpmworkdir, exist_ok=True)
+
+            rpm_temp_seq_loc = os.path.join(rpmworkdir, 'rpm.fa')
+            with open(rpm_temp_seq_loc, 'w') as f:
+                for sv_ind in target_ind:
+                    sv = sv_list[sv_ind]
+                    if sv[2] in {'DEL', 'INS', 'SUB'}:
+                        sv_id, _, _, chrom, ref_start, ref_end, qry_start, qry_end = sv
+
+                        ref_len = ref_end - ref_start + 1
+                        qry_len = qry_end - qry_start + 1
+
+                        if ref_len > 0:
+                            temp_seq = ref_seq[chrom][ref_start - repeat_find_len - 1:ref_end + repeat_find_len]
+                            f.write(f'>{sv_id}.ref\n')
+                            f.write(str(temp_seq) + '\n\n')
+
+                        if qry_len > 0:
+                            temp_seq = qry_seq[chrom][qry_start - repeat_find_len - 1:qry_end + repeat_find_len]
+                            f.write(f'>{sv_id}.qry\n')
+                            f.write(str(temp_seq) + '\n\n')
+    
+    return rpmworkdir_list
+
+
+
 def get_reapeatmasker_index_list(rpmworkdir, species):
     rpm_temp_seq_loc = os.path.join(rpmworkdir, 'rpm.fa')
     subprocess.run(['RepeatMasker', '-spec', species, '-nopost', rpm_temp_seq_loc], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=rpmworkdir)
@@ -290,6 +322,74 @@ def get_reapeatmasker_index_list(rpmworkdir, species):
     
     shutil.rmtree(rpmworkdir)
     return list(rpm_ind_set)
+
+
+def get_group_index(tar_list, ind, baseline=10000, reverse=False):
+    ans_ind = ind
+    walk = -1 if reverse else 1
+    while ans_ind + walk >= 0 and ans_ind + walk < len(tar_list) and abs(tar_list[ans_ind + walk] - tar_list[ans_ind]) < baseline:
+        ans_ind += walk
+
+    return ans_ind
+
+
+def get_correct_error_index_list(sv_list):
+    err_baseline = 10000
+    err_ind_list = []
+    real_sv_list = sorted(filter(lambda t: t[2] in {'DEL', 'INS', 'SUB'}, sv_list), key=lambda t: (t[3], t[4]))
+
+    tmp_chrom = None
+    tmp_chrom_list = []
+
+    real_chrom_sv_data = []
+
+    for sv in real_sv_list:
+        chrom = sv[3]
+
+        if chrom != tmp_chrom:
+            if len(tmp_chrom_list) > 0:
+                real_chrom_sv_data.append(tmp_chrom_list)
+            tmp_chrom, tmp_chrom_list = chrom, [sv]
+        else:
+            tmp_chrom_list.append(sv)
+
+    real_chrom_sv_data.append(tmp_chrom_list)
+
+    for real_chrom_sv_list in real_chrom_sv_data:
+        if len(real_chrom_sv_list) > 1:
+            real_chrom_qry_st = [i[6] for i in real_chrom_sv_list]
+
+            qry_diff_data = np.diff(real_chrom_qry_st)
+            qry_dup_ind_data = sorted(filter(lambda t: t[1] == 0, enumerate(qry_diff_data)), key=lambda t: -t[0])
+
+            for ind, _ in qry_dup_ind_data:
+                sv = real_chrom_sv_list.pop(ind)
+                err_ind_list.append(sv[0])
+
+            real_chrom_qry_st = [sv[6] for sv in real_chrom_sv_list]
+
+            qry_diff_data = np.diff(real_chrom_qry_st)
+            qry_err_ind_data = list(filter(lambda t: t[1] < -err_baseline, enumerate(qry_diff_data)))
+
+            if len(qry_err_ind_data) > 0:
+                real_chrom_ref_qry_diff = [sv[6] - sv[4] for sv in real_chrom_sv_list]
+                for ind, _ in qry_err_ind_data:
+                    err_lft_group = get_group_index(real_chrom_ref_qry_diff, ind, reverse=True, baseline=err_baseline)
+                    err_rht_group = get_group_index(real_chrom_ref_qry_diff, ind + 1, baseline=err_baseline)
+
+                    if err_lft_group == 0 or len(real_chrom_sv_list) - 1 == err_rht_group:
+                        if err_lft_group == 0:
+                            err_ind_list.extend([sv[0] for sv in real_chrom_sv_list[err_lft_group:ind + 1]])
+                        if len(real_chrom_sv_list) - 1 == err_rht_group:
+                            err_ind_list.extend([sv[0] for sv in real_chrom_sv_list[ind + 1:err_rht_group + 1]])
+                        
+                    else:
+                        if abs(real_chrom_ref_qry_diff[err_lft_group - 1] - real_chrom_ref_qry_diff[ind + 1]) < abs(real_chrom_ref_qry_diff[err_rht_group + 1] - real_chrom_ref_qry_diff[ind]):
+                            err_ind_list.extend([sv[0] for sv in real_chrom_sv_list[err_lft_group:ind + 1]])
+                        else:
+                            err_ind_list.extend([sv[0] for sv in real_chrom_sv_list[ind + 1:err_rht_group + 1]])
+
+    return err_ind_list
 
 
 def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000, repeat_find_len=50, workdir='data', sv_save='sv', min_sv_size=None,
@@ -337,39 +437,20 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
                         num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'COR {qry_ind + 1}/{len(qry_loc_list)}')
 
         sv_list = sorted(sv_list, key=lambda t: t[0])
-        
-        rpmworkdir_list = []
-        for i, target_ind in enumerate(np.array_split(np.arange(len(sv_list)), num_cpus)):
-            if np.size(target_ind) > 0:
-                rpmworkdir = os.path.join(qryworkdir, f'{i}_rpm')
-                rpmworkdir_list.append(rpmworkdir)
-                os.makedirs(rpmworkdir, exist_ok=True)
 
-                rpm_temp_seq_loc = os.path.join(rpmworkdir, 'rpm.fa')
-                with open(rpm_temp_seq_loc, 'w') as f:
-                    for sv_ind in target_ind:
-                        sv = sv_list[sv_ind]
-                        if sv[2] in {'DEL', 'INS', 'SUB'}:
-                            sv_id, _, _, chrom, ref_start, ref_end, qry_start, qry_end = sv
-
-                            ref_len = ref_end - ref_start + 1
-                            qry_len = qry_end - qry_start + 1
-
-                            if ref_len > 0:
-                                temp_seq = ref_seq[chrom][ref_start - repeat_find_len - 1:ref_end + repeat_find_len]
-                                f.write(f'>{sv_id}.ref\n')
-                                f.write(str(temp_seq) + '\n\n')
-
-                            if qry_len > 0:
-                                temp_seq = qry_seq[chrom][qry_start - repeat_find_len - 1:qry_end + repeat_find_len]
-                                f.write(f'>{sv_id}.qry\n')
-                                f.write(str(temp_seq) + '\n\n')
-
+        rpmworkdir_list = prepare_repeatmasker_multiprocessing(ref_seq, qry_seq, sv_list, qryworkdir, num_cpus, repeat_find_len)
         rpm_ind_list_data = p_map(partial(get_reapeatmasker_index_list, species=species), rpmworkdir_list, num_cpus=num_cpus, pbar=False)
-
         for rpm_ind_list in rpm_ind_list_data:
             for rpm_ind in rpm_ind_list:
                 sv_list[rpm_ind][2] = 'REPEAT:RPM'
+
+        call_err_try = 3
+        err_ind_list = [-1]
+        while call_err_try > 0 and err_ind_list != []:
+            call_err_try -= 1
+            err_ind_list = get_correct_error_index_list(sv_list)
+            for err_ind in err_ind_list:
+                sv_list[err_ind][2] = 'SV_COR_ERR'
 
         qry_basename = os.path.basename(qry_loc)
         with open(os.path.join(sv_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.correct.csv', 'w') as f:
