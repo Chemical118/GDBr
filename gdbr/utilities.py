@@ -1,37 +1,22 @@
 from statsmodels.nonparametric.kernel_regression import KernelReg
 from matplotlib.ticker import MaxNLocator
-from tqdm.contrib.telegram import tqdm
 from pathos.pools import ProcessPool
 from gdbr.version import get_version
 from pyfaidx import Fasta
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
 import pandas as pd
+import numpy as np
 
 import subprocess
 import argparse
 import datetime
-import p_tqdm
 import shutil
 import vcfpy
 import math
-import json
 import glob
 import os
-
-def get_telegram_data(file_loc):
-    if file_loc is None:
-        return None
-    
-    if os.path.exists(file_loc):
-        with open(file_loc, 'r') as f:
-            data = json.load(f)
-            return str(data['token']), str(data['chat_id'])
-    else:
-        return None
-
 
 def get_proper_thread(suggest_num_cpus, num_cpus, num_works=-1):
     suggest_num_cpus = max(1, suggest_num_cpus)
@@ -50,21 +35,16 @@ def get_proper_thread(suggest_num_cpus, num_cpus, num_works=-1):
     return hard_num_cpus, loop_num_cpus
 
 
-def p_map(f, it, num_cpus=1, pbar=True, telegram_token_loc='telegram.json', desc=''):
-    if pbar:
-        telegram_data = get_telegram_data(telegram_token_loc)
-        if telegram_data is None:
-            return p_tqdm.p_map(f, it, num_cpus=num_cpus, desc=desc)
-        else:
-            # only telegram taskbar; silent stdout
-            return p_tqdm.p_map(f, it, num_cpus=num_cpus, tqdm=tqdm, token=telegram_data[0], chat_id=telegram_data[1], desc=desc, file=open(os.devnull, 'w'))
+def p_map(f, it, num_cpus=1, hard=True):
+    pool = ProcessPool(num_cpus)
+    if hard:
+        return pool.map(f, it, chunksize=1)
     else:
-        pool = ProcessPool(num_cpus)
         return pool.map(f, it)
 
 
 def logprint(s):
-    print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] ' + s)
+    print(f'[{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] ' + s, flush=True)
 
 
 def gdbr_parser():
@@ -138,15 +118,6 @@ def gdbr_parser():
                                action='store_true',
                                help='overwrite the output directory')
 
-    fo_parser_anl.add_argument('--silent',
-                               action='store_true',
-                               help='turn off progress bar')
-    
-    fo_parser_anl.add_argument('--telegram_data_loc',
-                               type=os.path.abspath,
-                               default=None,
-                               help='for telegram progress bar suppport, this file must have "token" and "chat_id" with .json format')
-
     # analysis preprocess optional arguments
     po_parser_anl = parser_anl.add_argument_group('preprocess optional arguments')
     po_parser_anl.add_argument('--pre_min_sv_size',
@@ -176,7 +147,6 @@ def gdbr_parser():
     co_parser_anl.add_argument('--cor_min_sv_size',
                                type=int,
                                help='minimum variant size at correct step')
-    
 
     # analysis annotate optional arguments
     ao_parser_anl = parser_anl.add_argument_group('annotate optional arguments')
@@ -274,15 +244,6 @@ def gdbr_parser():
                                action='store_true',
                                help='overwrite the output directory')
 
-    op_parser_pre.add_argument('--silent',
-                               action='store_true',
-                               help='turn off progress bar')
-    
-    op_parser_pre.add_argument('--telegram_data_loc',
-                               type=os.path.abspath,
-                               default=None,
-                               help='for telegram progress bar suppport, this file must have "token" and "chat_id" with .json format')
-
     # correct_main
     # correct required arguments
     re_parser_cor = parser_cor.add_argument_group('required arguments')
@@ -353,15 +314,6 @@ def gdbr_parser():
     op_parser_cor.add_argument('--overwrite_output',
                                action='store_true',
                                help='overwrite the output directory')
-
-    op_parser_cor.add_argument('--silent',
-                               action='store_true',
-                               help='turn off progress bar')
-    
-    op_parser_cor.add_argument('--telegram_data_loc',
-                               type=os.path.abspath,
-                               default=None,
-                               help='for telegram progress bar suppport, this file must have "token" and "chat_id" with .json format')
 
     # annotate main
     # annotate required arguments
@@ -448,15 +400,6 @@ def gdbr_parser():
     op_parser_ant.add_argument('--overwrite_output',
                                action='store_true',
                                help='overwrite the output directory')
-
-    op_parser_ant.add_argument('--silent',
-                               action='store_true',
-                               help='turn off progress bar')
-
-    op_parser_ant.add_argument('--telegram_data_loc',
-                               type=os.path.abspath,
-                               default=None,
-                               help='for telegram progress bar suppport, this file must have "token" and "chat_id" with .json format.')
 
     return parser
 
@@ -794,11 +737,11 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         fig, ax_list = plt.subplots(3, 1, figsize=(6.4, 14.4))
         for tar_range, ax in zip([(1, 200), (1, 30)], ax_list):
             s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', alpha=1, ax=ax)
-            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+            s.set(xlabel='micro/homology (bp)', ylabel='Variant count')
 
         ax = ax_list[2]
         s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=(15, 200), binwidth=1, element='step', alpha=1, ax=ax)
-        s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+        s.set(xlabel='micro/homology (bp)', ylabel='Variant count')
         if a_ej_baseline is not None:
             ax.text(a_ej_baseline - 2, ax.get_ylim()[1] * 0.99, 'a-EJ',
                     color='red',
@@ -825,7 +768,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         fig, ax_list = plt.subplots(2, 1, figsize=(6.4, 9.6))
         for tar_range, ax in zip([(1, 200), (1, 30)], ax_list):
             s = sns.histplot(x=temp_ins_hom_cnt.keys(), weights=temp_ins_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
-            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+            s.set(xlabel='micro/homology (bp)', ylabel='Variant count')
         ax_list[0].set_title('Templated insertion respective homology distribution')
         save_fig(fig, savedir, 'result_temp_ins_hom_distribution')
 
@@ -834,7 +777,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         fig, ax_list = plt.subplots(2, 1, figsize=(6.4, 9.6))
         for tar_range, ax in zip([(1, 2000), (1, 200)], ax_list):
             s = sns.histplot(x=diff_locus_dsbr_hom_cnt.keys(), weights=diff_locus_dsbr_hom_cnt.values(), binrange=tar_range, binwidth=1, element='step', color=cb_hex_list[0], alpha=1, ax=ax)
-            s.set(xlabel='(micro)homology (bp)', ylabel='Variant count')
+            s.set(xlabel='micro/homology (bp)', ylabel='Variant count')
         ax_list[0].set_title('Different locus DSBR respective homology distribution')
         save_fig(fig, savedir, 'result_diff_locus_dsbr_hom_distribution')
     

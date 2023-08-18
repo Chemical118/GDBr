@@ -102,13 +102,11 @@ def get_one_way_templated_insertion(ref_seq, qry_seq, qryworkdir, temp_indel_fin
         f.write('>' + ref_subject_temp_seq.fancy_name + '\n')
         f.write(str(ref_subject_temp_seq))
 
-    cnt = 0
     first_flag = True
     while ref_left_hom == ref_left_temp_hom_find_len or ref_right_hom == ref_right_temp_hom_find_len or first_flag:
-        qry_query_temp_seq_loc = os.path.join(qryworkdir, f'qry_qry_{sv_id}_{cnt}.fasta')
-        ref_blast_result_loc = os.path.join(qryworkdir, f'ref_blast_{sv_id}_{cnt}.xml')
+        qry_query_temp_seq_loc = os.path.join(qryworkdir, f'qry_qry_{sv_id}.fasta')
+        ref_blast_result_loc = os.path.join(qryworkdir, f'ref_blast_{sv_id}.xml')
         first_flag = False
-        cnt += 1
 
         # each side homology length
         ref_left_temp_hom_find_len *= 2 if ref_left_hom == ref_left_temp_hom_find_len else 1
@@ -213,6 +211,10 @@ def get_one_way_templated_insertion(ref_seq, qry_seq, qryworkdir, temp_indel_fin
             ref_qry_nd = qry_start - 1 - ref_left_temp_hom_find_len + blast_result.query_end
             break
     
+    os.remove(ref_subject_temp_seq_loc)
+    os.remove(qry_query_temp_seq_loc)
+    os.remove(ref_blast_result_loc)
+
     # index search
     if ref_left_hom > 0 and ref_right_hom > 0:
         # left side
@@ -458,7 +460,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
 def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
-                  num_cpus=1, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False, trust_query=False):
+                  num_cpus=1, overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, sv_loc_list], ['Reference', 'Query', 'Corrected variant'])
     check_unique_basename(qry_loc_list)
 
@@ -472,7 +474,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
     
     if not trust_query:
-        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus, pbar=False)
+        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus)
 
     refdbdir = os.path.join(workdir, 'db_gdbr')
     os.makedirs(refdbdir, exist_ok=True)
@@ -481,10 +483,11 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     os.makedirs(os.path.join(dsbr_save, 'bed'), exist_ok=True)
     
     # split reference .fasta file and makeblastdb per chromosome
-    p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus, pbar=False)
+    p_map(partial(makeblastdb_from_location, seq_loc=ref_loc, dbdir=refdbdir), ref_chr_list, num_cpus=num_cpus)
 
     # select cpu proper usage
-    hard_num_cpus, loop_num_cpus = get_proper_thread(min(len(ref_chr_list), 3), num_cpus)
+    if diff_locus_dsbr_analysis:
+        hard_num_cpus, loop_num_cpus = get_proper_thread(min(len(ref_chr_list), 3), num_cpus)
 
     logprint(f'Task annotate start : {len(sv_loc_list)} SV detected')
 
@@ -513,7 +516,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
         hom_list = p_map(partial(get_homology, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir,
                                  hom_find_len=hom_find_len, temp_indel_find_len=temp_indel_find_len,
                                  near_gap_find_len=near_gap_find_len, user_gap_baseline=user_gap_baseline),
-                                 tar_sv_list, pbar=pbar, num_cpus=num_cpus, telegram_token_loc=telegram_token_loc, desc=f'ANT {qry_ind + 1}/{len(qry_loc_list)}')
+                                 tar_sv_list, num_cpus=num_cpus, hard=False)
         
         if diff_locus_dsbr_analysis:
             # check SV to annotate hard mode
@@ -525,7 +528,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
             hard_hom_list = p_map(partial(get_homology_hard, ref_loc=ref_loc, qry_loc=qry_loc, qryworkdir=qryworkdir, refdbdir=refdbdir,
                                           ref_chr_list=ref_chr_list, hom_find_len=hom_find_len, near_seq_kb_baseline=near_seq_kb_baseline,
                                           diff_locus_hom_baseline=diff_locus_hom_baseline, num_cpus=hard_num_cpus),
-                                          hard_sv_list, pbar=False, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc)
+                                          hard_sv_list, num_cpus=loop_num_cpus)
             
             hard_hom_list.reverse()
             for ind, hom in enumerate(hom_list):

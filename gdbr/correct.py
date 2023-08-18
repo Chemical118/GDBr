@@ -393,7 +393,7 @@ def get_correct_error_index_list(sv_list):
 
 
 def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000, repeat_find_len=50, workdir='data', sv_save='sv', min_sv_size=None,
-                 num_cpus=1, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False, trust_query=False):
+                 num_cpus=1, overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, vcf_loc_list], ['Reference', 'Query', 'Variant'])
     check_unique_basename(qry_loc_list)
     check_variant_caller(vcf_loc_list)
@@ -408,7 +408,7 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
         raise Exception('The number of query and variant must be same')
     
     os.makedirs(workdir, exist_ok=True)
-    safe_makedirs(sv_save)
+    safe_makedirs(sv_save, overwrite_output)
 
     # read .fasta file
     ref_seq = Fasta(ref_loc, build_index=False)
@@ -416,7 +416,7 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
     # get 1Mbp chromosome
     ref_chr_list = list(map(lambda t: t[0], filter(lambda t: len(t[1]) > 1e6, ref_seq.records.items())))
     if not trust_query:
-        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus, pbar=False)
+        p_map(partial(check_query_chrom, ref_chr_list=ref_chr_list), qry_loc_list, num_cpus=num_cpus)
 
     logprint(f'Task correct start : {len(vcf_loc_list)} query detected')
     for qry_ind, (qry_loc, vcf_loc) in enumerate(zip(qry_loc_list, vcf_loc_list)):
@@ -429,17 +429,16 @@ def correct_main(ref_loc, qry_loc_list, vcf_loc_list, species, sv_find_len=2000,
         os.makedirs(dbdir, exist_ok=True)
 
         # split query .fasta file and makeblastdb per chromosome
-        p_map(partial(makeblastdb_from_location, seq_loc=qry_loc, dbdir=dbdir), qry_chr_list, num_cpus=num_cpus, pbar=False)
+        p_map(partial(makeblastdb_from_location, seq_loc=qry_loc, dbdir=dbdir), qry_chr_list, num_cpus=num_cpus)
 
         vcf_tot_data = sorted(get_vcf_tot_data(vcf_loc, ref_chr_list), key=get_proper_correct_order)
 
-        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, min_sv_size=min_sv_size, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, 
-                        num_cpus=num_cpus, pbar=pbar, telegram_token_loc=telegram_token_loc, desc=f'COR {qry_ind + 1}/{len(qry_loc_list)}')
+        sv_list = p_map(partial(get_real_sv, sv_find_len=sv_find_len, repeat_find_len=repeat_find_len, min_sv_size=min_sv_size, ref_loc=ref_loc, qry_loc=qry_loc, dbdir=dbdir, qryworkdir=qryworkdir), vcf_tot_data, num_cpus=num_cpus)
 
         sv_list = sorted(sv_list, key=lambda t: t[0])
 
         rpmworkdir_list = prepare_repeatmasker_multiprocessing(ref_seq, qry_seq, sv_list, qryworkdir, num_cpus, repeat_find_len)
-        rpm_ind_list_data = p_map(partial(get_reapeatmasker_index_list, species=species), rpmworkdir_list, num_cpus=num_cpus, pbar=False)
+        rpm_ind_list_data = p_map(partial(get_reapeatmasker_index_list, species=species), rpmworkdir_list, num_cpus=num_cpus)
         for rpm_ind_list in rpm_ind_list_data:
             for rpm_ind in rpm_ind_list:
                 sv_list[rpm_ind][2] = 'REPEAT:RPM'

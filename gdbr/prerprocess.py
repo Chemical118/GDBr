@@ -35,7 +35,7 @@ def preprocess_pipeline(qry_loc, ref_loc, log_save, qry_save, var_save, workdir,
         f.writelines(vcf_str_list)
 
 
-def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='data', min_sv_size=50, num_cpus=1, low_memory=False, trust_workdir=False, pbar=True, telegram_token_loc='telegram.json', overwrite_output=False):
+def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='data', min_sv_size=50, num_cpus=1, low_memory=False, trust_workdir=False, overwrite_output=False):
     check_file_exist([[ref_loc], qry_loc_list], ['Reference', 'Raw query'])
     check_unique_basename(qry_loc_list)
     
@@ -46,7 +46,9 @@ def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='da
     var_save = os.path.join(preprocess_save, 'vcf')
 
     if not trust_workdir:
-        safe_makedirs(workdir)
+        workdir_list = os.listdir(workdir)
+        if len(workdir_list) != 1 or workdir_list[0].split('.')[:2] != ['time', 'gdbr']:
+            safe_makedirs(workdir)
     
     os.makedirs(qry_save, exist_ok=True)
     os.makedirs(var_save, exist_ok=True)
@@ -62,6 +64,6 @@ def preprocess_main(ref_loc, qry_loc_list, preprocess_save='prepro', workdir='da
 
     p_map(partial(preprocess_pipeline, ref_loc=ref_loc, log_save=log_save, qry_save=qry_save, var_save=var_save, 
                   workdir=workdir, min_sv_size=min_sv_size, num_cpus=preprocess_num_cpus, trust_workdir=trust_workdir),
-                  qry_loc_list, pbar=pbar, num_cpus=loop_num_cpus, telegram_token_loc=telegram_token_loc, desc='PRE')
+                  qry_loc_list, num_cpus=loop_num_cpus)
     
     logprint(f'{"Trust preprocess" if trust_workdir else "Preprocess"} complete')
