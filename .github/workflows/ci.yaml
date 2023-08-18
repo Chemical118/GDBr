@@ -22,10 +22,7 @@ jobs:
             biopython
             repeatmasker
             coverage
-            tqdm
-            p-tqdm
             pyfaidx
-            requests
             vcfpy
             statsmodels
           cache-environment: true
