@@ -5,7 +5,7 @@ import shutil
 
 class PreprocessTest(TestCase):
     def test_main_example(self):
-        correct_main('test/example/ref.fa', ['test/example/qry.fa'], ['test/example/variants.vcf'], 'human', pbar=False, min_sv_size=50)
+        correct_main('test/example/ref.fa', ['test/example/qry.fa'], ['test/example/variants.vcf'], 'human', min_sv_size=50)
 
         # clean test
         shutil.rmtree('sv')
