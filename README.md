@@ -37,7 +37,7 @@ By using `RagTag` and `svim-asm`, `GDBr` preprocess data and return properly sca
 gdbr preprocess -r <reference.fa> -q <query1.fa query2.fa ...> -o prepro -t <number of threads>
 ```
 
-> Preprocess step needs lots of memory, turn on `--low_memory` if you run out of memory
+The preprocess step requires the use of a sorting program to do the scaffolding and variant calling, and even though they are allocated a lot of threads, they still don't use them all. An optimization approach is to distribute multiple queries to a small number of threads. However, this approach requires very high memory usage, so GDBr was developed to allow the user to freely choose this optimization by providing the `--low_memory ` option.
 
 #### Correct
 
@@ -77,3 +77,18 @@ gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDB
 | DSBR_END          | different locus DSBR end                             |
 | HOM_SEQ/HOM_START_SEQ | INDEL : homology sequence / SUB : left homology sequence|
 | HOM_END_SEQ           | SUB : right homology sequence                              |
+
+### Benckmarking
+
+You can benchmark any command in GDBr with the `--benchmark` option by `GNU time` and `psutil`. It provides user time, system time, average CPU usage, multiprocessing efficiency, maximum RAM usage and wall clock time.
+
+```
+...
+[2023-08-18 13:44:16] GDBr benchmark complete
+User time (seconds) : 8007.44
+System time (seconds) : 19901.00
+Percent of CPU this job got : 7267%
+Multiprocessing efficiency : 0.5118
+Wall clock time (h:mm:ss or m:ss) : 6:23.99
+Max memory usage (GB) : 23.5805
+```
