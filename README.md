@@ -55,6 +55,8 @@ gdbr correct -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v prepro/vc
 gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDBr.correct.csv -o dsbr -t <number of threads>
 ```
 
+You can turn on different locus DSBR analysis by `--diff_locus_dsbr_analysis`, however analysis can give false positives due to partial homology on the sex chromosomes.
+
 ### Final output
 
 `GDBr`'s final ouput is `<query basename>.GDBr.result.tsv`. This is simple description of the final output.
@@ -69,7 +71,7 @@ gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDB
 | REF_END           | variant reference end location                       |
 | QRY_START         | variant query start location                         |
 | QRY_END           | variant query end location                           |
-| REPAIR_TYPE       | DSBR mechanism type                                  |
+| GDBR_TYPE       | GDBr variant type                                 |
 | HOM_LEN/HOM_START_LEN | INDEL : homology length / SUB : left homology length |
 | HOM_END_LEN           | SUB : right homology length                                |
 | DSBR_CHR          | different locus DSBR chromosome                      |
@@ -77,6 +79,7 @@ gdbr analysis -r <reference.fa> -q prepro/query/*.GDBr.preprocess.fa -v sv/*.GDB
 | DSBR_END          | different locus DSBR end                             |
 | HOM_SEQ/HOM_START_SEQ | INDEL : homology sequence / SUB : left homology sequence|
 | HOM_END_SEQ           | SUB : right homology sequence                              |
+| PUTATIVE_MECHANISM    | GDBr DSB repair putative mechanism               |
 
 ### Benckmarking
 

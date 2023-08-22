@@ -919,3 +919,5 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                 line2d.set_ydata(y / np.max(y))
 
         save_fig(fig, savedir, 'result_chrom_a_ej_no_hom_ssa_distribution')
+
+    return a_ej_baseline

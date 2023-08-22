@@ -459,6 +459,30 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     
     return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
+
+def save_result(output_tot_data, a_ej_baseline, dsbr_save):
+    qry_basename, output_data = output_tot_data
+
+    for op in output_data:
+        putative_mechanism = ''
+        if op[2] in {'DEL', 'INS', 'SUB'}:
+            if op[8] == 'TEMP_INS':
+                putative_mechanism = 'TMEJ_templated_insertion'
+            elif op[8] == 'HOM':
+                if a_ej_baseline is None:
+                    putative_mechanism = 'Not_determined'
+                else:
+                    putative_mechanism = 'a-EJ' if op[9] <= a_ej_baseline else 'SSA'
+            else:
+                putative_mechanism = 'Not_determined'
+        op.append(putative_mechanism)
+
+    with open(os.path.join(dsbr_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.result.tsv', 'w') as f:
+        tf = csv.writer(f, delimiter='\t')
+        tf.writerow(('ID', 'CALL_TYPE','SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'GDBR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ', 'PUTATIVE_MECHANISM'))
+        tf.writerows(output_data)
+
+
 def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
                   num_cpus=1, overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, sv_loc_list], ['Reference', 'Query', 'Corrected variant'])
@@ -506,6 +530,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     merge_bed_df = pd.DataFrame()
     tot_sv_len = 0
 
+    output_data_list = []
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
         qryworkdir = os.path.join(workdir, str(qry_ind) + '_gdbr')
         os.makedirs(qryworkdir, exist_ok=True)
@@ -575,10 +600,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
                 output_data.append(sv)
         
         qry_basename = os.path.basename(qry_loc)
-        with open(os.path.join(dsbr_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.result.tsv', 'w') as f:
-            tf = csv.writer(f, delimiter='\t')
-            tf.writerow(('ID', 'CALL_TYPE','SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'REPAIR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ'))
-            tf.writerows(output_data)
+        output_data_list.append((qry_basename, output_data))
         
         # save bed file
         tdf = pd.DataFrame(bed_data_list)
@@ -594,5 +616,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
     # draw figure
     os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
-    draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list), diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
+    a_ej_baseline = draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
+                                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list), diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
+
+    p_map(partial(save_result, a_ej_baseline=a_ej_baseline, dsbr_save=dsbr_save), output_data_list, num_cpus=num_cpus)
