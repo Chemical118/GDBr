@@ -550,7 +550,7 @@ def get_chrom_order(s):
 
 
 def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, query_num, diff_locus_dsbr_analysis, ref_seq, merge_bed_df):
+                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df):
     legend_fontsize = 8.5
     width = 0.17
 
@@ -564,11 +564,12 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                         ('INV', 4),
                         ('REPEAT', 7),
                         ('EXCEPT', 6),
+                        ('ETC_EXCEPT', 6),
                         ('HOM', 0),
                         ('HOM_GT_SV_90', 6),
                         ('NO_HOM', 1),
                         ('TEMP_INS', 0),
-                        ('TEMP_INS_GT_SV_90', 6),
+                        ('TEMP_INS_HOM_GT_SV_90', 6),
                         ('DIFF_LOCUS_DSBR', 2),
                         ('SUB_UNIQUE_NO_HOM', 3),
                         ('SUB_REPEAT', 8),
@@ -583,13 +584,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     code_palette_dict = dict((s, cb_hex_list[p]) for s, p in code_palette_data)
 
     # Preprocess classification
-    target_data = [(k, pre_type_cnt[k] / query_num if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
+    target_data = [(k, pre_type_cnt[k] if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Preprocess variant classification average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, pre_type_cnt[k] / tot_sv_len * 100 if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -601,15 +603,16 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     # Correct classification
     # verbose figure
     fig, ax = plt.subplots(2, 2, figsize=(6.4 * 2, 9.6))
-    cor_type_cnt['EXCEPT'] = sum(cor_type_cnt.get(i, 0) for i in ['FP_SV', 'ERR_POS', 'UNSUP_ID', 'NO_TARGET_CHROM'])
-    target_list = ['DEL', 'INS', 'SUB', 'REPEAT:TRF_FIRST', 'REPEAT:BLAST', 'REPEAT:TRF_LAST', 'REPEAT:RPM', 'SV_COR_ERR', 'SV_SIZE_FILTER', 'EXCEPT']
-    target_data = [(k, cor_type_cnt[k] / query_num if k in cor_type_cnt else 0) for k in target_list]
+    cor_type_cnt['ETC_EXCEPT'] = sum(cor_type_cnt.get(i, 0) for i in ['FP_SV', 'ERR_POS', 'UNSUP_ID', 'NO_TARGET_CHROM'])
+    target_list = ['DEL', 'INS', 'SUB', 'REPEAT:TRF_FIRST', 'REPEAT:BLAST', 'REPEAT:TRF_LAST', 'REPEAT:RPM', 'SV_COR_ERR', 'SV_SIZE_FILTER', 'ETC_EXCEPT']
+    target_data = [(k, cor_type_cnt[k] if k in cor_type_cnt else 0) for k in target_list]
     ax1, ax2 = ax[0, 1], ax[1, 1]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Corrected variant classification average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    ax1.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -620,13 +623,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     # silent figure
     cor_type_cnt['REPEAT'] = sum(cor_type_cnt.get(i, 0) for i in ['REPEAT:TRF_FIRST', 'REPEAT:BLAST', 'REPEAT:TRF_LAST', 'REPEAT:RPM'])
     cor_type_cnt['EXCEPT'] = sum(cor_type_cnt.get(i, 0) for i in ['FP_SV', 'ERR_POS', 'UNSUP_ID', 'SV_COR_ERR', 'SV_SIZE_FILTER', 'NO_TARGET_CHROM'])
-    target_data = [(k, cor_type_cnt[k] / query_num if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
+    target_data = [(k, cor_type_cnt[k] if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
     ax1, ax2 = ax[0, 0], ax[1, 0]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Corrected variant classification average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(tot_sv_len / query_num)})'for tar, val in target_data])
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -638,7 +642,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     # Deletion, insertion, indel classification
     cnt = del_type_cnt
     target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
-    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     fig, ax = plt.subplots(2, 3, figsize=(6.4 * 3, 9.6))
 
     ax1, ax2 = ax[0, 0], ax[1, 0]
@@ -646,7 +650,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Deletion variant DSBR estimation average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -657,12 +662,13 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 1], ax[1, 1]
     cnt = ins_type_cnt
     target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
-    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Insertion variant DSBR estimation average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -673,12 +679,13 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 2], ax[1, 2]
     cnt = del_type_cnt + ins_type_cnt
     target_list = ['HOM', 'NO_HOM', 'HOM_GT_SV_90']
-    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Indel variant DSBR estimation average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -689,15 +696,15 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     # Substitution classification
     cnt = sub_type_cnt
-    target_list = ['TEMP_INS', 'DIFF_LOCUS_DSBR', 'SUB_UNIQUE_NO_HOM', 'SUB_NOT_SPECIFIED', 'SUB_REPEAT', 'TEMP_INS_GT_SV_90'] if diff_locus_dsbr_analysis else ['TEMP_INS', 'SUB_NOT_SPECIFIED', 'TEMP_INS_GT_SV_90']
-    target_data = [(k, cnt[k] / query_num if k in cnt else 0) for k in target_list]
+    target_list = ['TEMP_INS', 'DIFF_LOCUS_DSBR', 'SUB_UNIQUE_NO_HOM', 'SUB_NOT_SPECIFIED', 'SUB_REPEAT', 'TEMP_INS_HOM_GT_SV_90'] if diff_locus_dsbr_analysis else ['TEMP_INS', 'SUB_NOT_SPECIFIED', 'TEMP_INS_HOM_GT_SV_90']
+    target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
     ax1.set_title('Substitution variant DSBR estimation average count')
     ax1.set_xlabel('Avg. count')
-    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val)} / {round(sum(cnt.values()) / query_num)})'for tar, val in target_data])
-
+    ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
+    ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
@@ -824,6 +831,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         ax = ax_array[i + 1, 0]
         sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
         ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), xlabel='Variant location (bp)', ylabel='Variant count')
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
         if i == 0:
             sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
         else:
@@ -834,6 +842,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         ax = ax_array[i + 1, 1]
         sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
         ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
         if i == 0:
             sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
         else:
@@ -862,6 +871,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             ax = ax_array[i + 1, 0]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
             ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
             else:
@@ -872,6 +882,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             ax = ax_array[i + 1, 1]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
             ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
             else:
@@ -899,6 +910,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             ax = ax_array[i + 1, 0]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
             ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
             else:
@@ -909,6 +921,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
             ax = ax_array[i + 1, 1]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
             ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
             else:

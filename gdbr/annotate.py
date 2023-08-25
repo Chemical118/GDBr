@@ -422,7 +422,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
         
         if ref_lef_hom > 0 or qry_lef_hom > 0:
             left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_lef_hom, ref_rht_hom, ref_lef_hom_seq, ref_rht_hom_seq) if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom, qry_lef_hom_seq, qry_rht_hom_seq)
-            dsb_repair_type = 'TEMP_INS_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'TEMP_INS'
+            dsb_repair_type = 'TEMP_INS_HOM_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'TEMP_INS'
 
         else:
             dsb_repair_type = 'SUB_NOT_SPECIFIED'
@@ -588,19 +588,19 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
         hom_list.reverse()
 
-        output_data = []
+        output = []
         bed_data_list = []
         for sv in sv_list:
             sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
             if sv[2] in {'DEL', 'INS', 'SUB'}:
                 hom = list(hom_list.pop())
                 bed_data_list.append((sv[3], sv[4] - 1, sv[5], hom[2], -1 if hom[3] is None else hom[3], -1 if hom[4] is None else hom[4], sv[0]))
-                output_data.append(sv + hom[2:])
+                output.append(sv + hom[2:])
             else:
-                output_data.append(sv)
+                output.append(sv)
         
         qry_basename = os.path.basename(qry_loc)
-        output_data_list.append((qry_basename, output_data))
+        output_data_list.append((qry_basename, output))
         
         # save bed file
         tdf = pd.DataFrame(bed_data_list)
@@ -617,6 +617,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     # draw figure
     os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
     a_ej_baseline = draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, len(qry_loc_list), diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
+                                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
 
-    p_map(partial(save_result, a_ej_baseline=a_ej_baseline, dsbr_save=dsbr_save), output_data_list, num_cpus=num_cpus)
+    for output_data in output_data_list:
+        save_result(output_data, a_ej_baseline=a_ej_baseline, dsbr_save=dsbr_save)
