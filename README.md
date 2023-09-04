@@ -74,6 +74,7 @@ You can turn on different locus DSBR analysis by `--diff_locus_dsbr_analysis`, h
 | GDBR_TYPE       | GDBr variant type                                 |
 | HOM_LEN/HOM_START_LEN | INDEL : homology length / SUB : left homology length |
 | HOM_END_LEN           | SUB : right homology length                                |
+| TEMP_INS_SEQ_LOC  | templated insertion sequence location (REF or QRY)   |
 | DSBR_CHR          | different locus DSBR chromosome                      |
 | DSBR_START        | different locus DSBR start                           |
 | DSBR_END          | different locus DSBR end                             |

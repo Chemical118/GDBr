@@ -550,9 +550,10 @@ def get_chrom_order(s):
 
 
 def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df):
+                indel_hom_cnt, temp_ins_hom_cnt, temp_ins_seq_loc_cnt, temp_ins_seq_len_cnt, temp_ins_del_len_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df):
     legend_fontsize = 8.5
     width = 0.17
+    linewidth = 1
 
     sns.set_palette('colorblind')
     cb_hex_list = sns.color_palette('colorblind').as_hex()
@@ -579,7 +580,9 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                         ('REPEAT:TRF_LAST', 4),
                         ('REPEAT:RPM', 8),
                         ('SV_COR_ERR', 3),
-                        ('SV_SIZE_FILTER', 9)]
+                        ('SV_SIZE_FILTER', 9),
+                        ('REF', 0),
+                        ('QRY', 1)]
     
     code_palette_dict = dict((s, cb_hex_list[p]) for s, p in code_palette_data)
 
@@ -588,8 +591,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Preprocess variant classification average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Preprocess variant classification count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, pre_type_cnt[k] / tot_sv_len * 100 if k in pre_type_cnt else 0) for k in ['DEL', 'INS', 'BND', 'INV']]
@@ -609,8 +612,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 1], ax[1, 1]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Corrected variant classification average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Corrected variant classification count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc='center left', bbox_to_anchor=(1.0, 0.5), prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in target_list]
@@ -627,8 +630,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 0], ax[1, 0]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Corrected variant classification average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Corrected variant classification count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {tot_sv_len})'for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cor_type_cnt[k] / tot_sv_len * 100 if k in cor_type_cnt else 0) for k in ['DEL', 'INS', 'SUB', 'REPEAT', 'EXCEPT']]
@@ -648,8 +651,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 0], ax[1, 0]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Deletion variant DSBR estimation average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Deletion variant DSBR estimation count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
@@ -665,8 +668,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Insertion variant DSBR estimation average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Insertion variant DSBR estimation count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
@@ -682,8 +685,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Indel variant DSBR estimation average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Indel variant DSBR estimation count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
@@ -701,8 +704,8 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Substitution variant DSBR estimation average count')
-    ax1.set_xlabel('Avg. count')
+    ax1.set_title('Substitution variant DSBR estimation count')
+    ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
@@ -779,6 +782,40 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         ax_list[0].set_title('Templated insertion respective homology distribution')
         save_fig(fig, savedir, 'result_temp_ins_hom_distribution')
 
+        fig, ax_list = plt.subplots(2, 2, figsize=(6.4 * 2, 9.6))
+
+        ax1, ax2 = ax_list[0, 0], ax_list[1, 0]
+        cnt = temp_ins_seq_loc_cnt
+        target_list = ['REF', 'QRY']
+        target_data = [(k, temp_ins_seq_loc_cnt[k] if k in cnt else 0) for k in target_list]
+        pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
+        ax1.axes.get_yaxis().set_visible(False)
+        ax1.set_title('Templated insertion location count')
+        ax1.set_xlabel('Count')
+        ax1.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
+        ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})'for tar, (_, val) in zip(['Reference', 'Query'], target_data)])
+        target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
+        pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
+        ax2.axes.get_yaxis().set_visible(False)
+        ax2.set_title('Templated insertion location frequency')
+        ax2.set_xlabel('Frequency (%)')
+        ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, (_, val) in zip(['Reference', 'Query'], target_data)])
+
+
+        ax1, ax2 = ax_list[0, 1], ax_list[1, 1]
+        x = list(temp_ins_seq_len_cnt.keys()) + list(temp_ins_del_len_cnt.keys())
+        weights = list(temp_ins_seq_len_cnt.values()) + list(temp_ins_del_len_cnt.values())
+        hue = ['Templated insertion'] * len(temp_ins_seq_len_cnt) + ['Deletion'] * len(temp_ins_del_len_cnt)
+        sns.histplot(x=x, weights=weights, hue=hue, binrange=(1, 50), binwidth=1, element='step', alpha=1, fill=False, ax=ax1, linewidth=linewidth)
+        sns.move_legend(ax1, loc=None, fontsize=legend_fontsize)
+        ax1.set_title('Templated insertion - deletion length distribution')
+        ax1.set_xlabel('length (bp)')
+
+        sns.histplot(x=x, weights=weights, hue=hue, binrange=(1, 200), binwidth=1, element='step', alpha=1, fill=False, ax=ax2, linewidth=linewidth)
+        sns.move_legend(ax2, loc=None, fontsize=legend_fontsize)
+        ax2.set_xlabel('length (bp)')
+        save_fig(fig, savedir, 'result_temp_ins_sequence_data')
+
     # Different locus DSBR respective homology distribution
     if diff_locus_dsbr_hom_cnt:
         fig, ax_list = plt.subplots(2, 1, figsize=(6.4, 9.6))
@@ -794,11 +831,11 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     merge_bed_df['Homology type'] = ['Homology' if i in {'HOM', 'TEMP_INS'} else 'No homology' for i in merge_bed_df['gdbr_type']]
     if a_ej_baseline is not None:
         dsb_repair_type_list = []
-        for gt, h in zip(merge_bed_df['gdbr_type'], merge_bed_df['hom_l']):
-            if gt == 'TEMP_INS':
+        for gdbr_type, hom in zip(merge_bed_df['gdbr_type'], merge_bed_df['hom_l']):
+            if gdbr_type == 'TEMP_INS':
                 dsb_repair_type_list.append('a-EJ')
-            elif gt == 'HOM':
-                if h <= a_ej_baseline:
+            elif gdbr_type == 'HOM':
+                if hom <= a_ej_baseline:
                     dsb_repair_type_list.append('a-EJ')
                 else:
                     dsb_repair_type_list.append('SSA')
@@ -810,7 +847,6 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     chr_list = sorted(set(merge_bed_df['chrom']), key=get_chrom_order)
     chr_res_df_data = [(merge_bed_df.query(f'chrom == "{chrom}"'), chrom, len(ref_seq[chrom])) for chrom in chr_list]
 
-    linewidth = 1
     binwidth = round(sum(len(ref_seq[chrom]) for chrom in chr_list) / 5000)
     nrows, ncols = len(chr_res_df_data), 2
 

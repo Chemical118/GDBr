@@ -331,7 +331,7 @@ def get_non_homology_insertion_loaction(tar_seq, near_seq_kb_baseline, refdbdir,
 
 
 def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_list, num_cpus, hom_find_len=2000, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3):
-    sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq = (None,) * 10
+    sv_id, cor_id, dsb_repair_type, left_hom, right_hom, temp_ins_seq_loc, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq = (None,) * 11
     sv_id, _, cor_id, chrom, ref_start, ref_end, qry_start, qry_end = sv_data
 
     ref_seq = Fasta(ref_loc, build_index=False)
@@ -377,9 +377,9 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
                                                                         ref_seq[qry_ins_chrom][qry_ins_start - 1:qry_ins_end + hom_find_len],
                                                                         qry_len, qry_ins_len, sv_id, qryworkdir)
         
-        dsbr_chrom, dsbr_start, dsbr_end, left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_ins_chrom, ref_ins_start, ref_ins_end, ref_ins_lef_hom, ref_ins_rht_hom, ref_ins_lef_hom_seq, ref_ins_rht_hom_seq) \
+        dsbr_chrom, dsbr_start, dsbr_end, left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_ins_chrom, ref_ins_start, ref_ins_end, ref_ins_lef_hom, ref_ins_rht_hom, ref_ins_lef_hom_seq[::-1], ref_ins_rht_hom_seq) \
                                                                                              if bool(ref_ins_lef_hom * ref_ins_rht_hom) * (ref_ins_lef_hom + ref_ins_rht_hom + bool(ref_len > qry_len) - 0.5) > bool(qry_ins_lef_hom * qry_ins_rht_hom) * (qry_ins_lef_hom + qry_ins_rht_hom) else \
-                                                                                             (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom, qry_ins_lef_hom_seq, qry_ins_rht_hom_seq)
+                                                                                             (qry_ins_chrom, qry_ins_start, qry_ins_end, qry_ins_lef_hom, qry_ins_rht_hom, qry_ins_lef_hom_seq[::-1], qry_ins_rht_hom_seq)
         if left_hom + right_hom < diff_locus_hom_baseline or left_hom * right_hom == 0:
             dsb_repair_type = 'SUB_UNIQUE_NO_HOM'
         else:
@@ -394,11 +394,11 @@ def get_homology_hard(sv_data, ref_loc, qry_loc, refdbdir, qryworkdir, ref_chr_l
             dsb_repair_type = 'SUB_NOT_SPECIFIED'
 
 
-    return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
+    return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, temp_ins_seq_loc, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
 
 def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3):
-    sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq = (None,) * 10
+    sv_id, cor_id, dsb_repair_type, left_hom, right_hom, temp_ins_seq_loc, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq = (None,) * 11
     sv_id, _, cor_id, chrom, ref_start, ref_end, qry_start, qry_end = sv_data
 
     ref_seq = Fasta(ref_loc, build_index=False)
@@ -421,7 +421,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
                                                                    
         
         if ref_lef_hom > 0 or qry_lef_hom > 0:
-            left_hom, right_hom, left_hom_seq, right_hom_seq = (ref_lef_hom, ref_rht_hom, ref_lef_hom_seq, ref_rht_hom_seq) if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom, qry_lef_hom_seq, qry_rht_hom_seq)
+            left_hom, right_hom, left_hom_seq, right_hom_seq, temp_ins_seq_loc = (ref_lef_hom, ref_rht_hom, ref_lef_hom_seq, ref_rht_hom_seq, 'QRY') if ref_lef_hom + ref_rht_hom >= qry_lef_hom + qry_rht_hom else (qry_lef_hom, qry_rht_hom, qry_lef_hom_seq, qry_rht_hom_seq, 'REF')
             dsb_repair_type = 'TEMP_INS_HOM_GT_SV_90' if max(left_hom, right_hom) > max(ref_len, qry_len) * 0.9 else 'TEMP_INS'
 
         else:
@@ -430,25 +430,25 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
     else:
         lef_hom = rht_hom = 0
         if cor_id == 'DEL':
-            lef_hom, lef_hom_seq = get_one_way_homology(ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end],
-                                                        qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end + ref_len],
+            lef_hom, lef_hom_seq = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len].reverse,
+                                                        qry_seq[chrom][max(0, qry_start - 1 - ref_len):qry_end + hom_find_len].reverse,
                                                         hom_find_len, hom_find_len, sv_id, qryworkdir)
             
-            rht_hom, rht_hom_seq = get_one_way_homology(ref_seq[chrom][ref_start - 1:ref_end + hom_find_len].reverse,
-                                                        qry_seq[chrom][max(0, qry_start - 1 - ref_len):qry_end + hom_find_len].reverse,
+            rht_hom, rht_hom_seq = get_one_way_homology(ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end],
+                                                        qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end + ref_len],
                                                         hom_find_len, hom_find_len, sv_id, qryworkdir)
 
         else:
-            lef_hom, lef_hom_seq = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end],
-                                                        ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end + qry_len],
+            lef_hom, lef_hom_seq = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len].reverse,
+                                                        ref_seq[chrom][max(0, ref_start - 1 - qry_len):ref_end + hom_find_len].reverse,
                                                         hom_find_len, hom_find_len, sv_id, qryworkdir)
             
-            rht_hom, rht_hom_seq = get_one_way_homology(qry_seq[chrom][qry_start - 1:qry_end + hom_find_len].reverse,
-                                                        ref_seq[chrom][max(0, ref_start - 1 - qry_len):ref_end + hom_find_len].reverse,
+            rht_hom, rht_hom_seq = get_one_way_homology(qry_seq[chrom][max(0, qry_start - 1 - hom_find_len):qry_end],
+                                                        ref_seq[chrom][max(0, ref_start - 1 - hom_find_len):ref_end + qry_len],
                                                         hom_find_len, hom_find_len, sv_id, qryworkdir)
 
         left_hom = lef_hom + rht_hom
-        left_hom_seq = lef_hom_seq + rht_hom_seq
+        left_hom_seq = lef_hom_seq[::-1] + rht_hom_seq
 
         if left_hom > (ref_len if cor_id == 'DEL' else qry_len) * 0.9:
             dsb_repair_type = 'HOM_GT_SV_90'
@@ -457,7 +457,7 @@ def get_homology(sv_data, ref_loc, qry_loc, qryworkdir, hom_find_len=2000, temp_
         else:
             dsb_repair_type = 'NO_HOM'
     
-    return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
+    return sv_id, cor_id, dsb_repair_type, left_hom, right_hom, temp_ins_seq_loc, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
 
 
 def save_result(output_tot_data, a_ej_baseline, dsbr_save):
@@ -479,7 +479,7 @@ def save_result(output_tot_data, a_ej_baseline, dsbr_save):
 
     with open(os.path.join(dsbr_save, remove_gdbr_postfix(qry_basename)) + '.GDBr.result.tsv', 'w') as f:
         tf = csv.writer(f, delimiter='\t')
-        tf.writerow(('ID', 'CALL_TYPE','SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'GDBR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ', 'PUTATIVE_MECHANISM'))
+        tf.writerow(('ID', 'CALL_TYPE','SV_TYPE', 'CHR', 'REF_START', 'REF_END', 'QRY_START', 'QRY_END', 'GDBR_TYPE', 'HOM_LEN/HOM_START_LEN', 'HOM_END_LEN', 'TEMP_INS_SEQ_LOC', 'DSBR_CHR', 'DSBR_START', 'DSBR_END', 'HOM_SEQ/HOM_START_SEQ', 'HOM_END_SEQ', 'PUTATIVE_MECHANISM'))
         tf.writerows(output_data)
 
 
@@ -527,6 +527,10 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     temp_ins_hom_cnt = Counter()
     diff_locus_dsbr_hom_cnt = Counter()
 
+    temp_ins_seq_loc_cnt = Counter()
+    temp_ins_seq_len_cnt = Counter()
+    temp_ins_del_len_cnt = Counter()
+
     merge_bed_df = pd.DataFrame()
     tot_sv_len = 0
 
@@ -560,40 +564,45 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
                 if hom[2] == 'SUB_NOT_SPECIFIED':
                     hom_list[ind] = hard_hom_list.pop()
 
-        # figure count
         tot_sv_len += len(sv_list)
-        for sv in sv_list:
-            pre_type_cnt[sv[1]] += 1
-            cor_type_cnt[sv[2]] += 1
-        
-        for hom in hom_list:
-            cor_id = hom[1]
-            dsb_repair_type = hom[2]
-
-            if cor_id == 'DEL':
-                del_type_cnt[dsb_repair_type] += 1
-            elif cor_id == 'INS':
-                ins_type_cnt[dsb_repair_type] += 1
-            elif cor_id == 'SUB':
-                sub_type_cnt[dsb_repair_type] += 1
-
-            if dsb_repair_type == 'HOM':
-                indel_hom_cnt[hom[3]] += 1
-            elif dsb_repair_type == 'TEMP_INS':
-                temp_ins_hom_cnt[hom[3]] += 1
-                temp_ins_hom_cnt[hom[4]] += 1
-            elif dsb_repair_type == 'DIFF_LOCUS_DSBR':
-                diff_locus_dsbr_hom_cnt[hom[3]] += 1
-                diff_locus_dsbr_hom_cnt[hom[4]] += 1
-
         hom_list.reverse()
 
         output = []
         bed_data_list = []
         for sv in sv_list:
+            pre_type_cnt[sv[1]] += 1
+            cor_type_cnt[sv[2]] += 1
+
             sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
             if sv[2] in {'DEL', 'INS', 'SUB'}:
                 hom = list(hom_list.pop())
+
+                cor_id = hom[1]
+                dsb_repair_type = hom[2]
+
+                if cor_id == 'DEL':
+                    del_type_cnt[dsb_repair_type] += 1
+                elif cor_id == 'INS':
+                    ins_type_cnt[dsb_repair_type] += 1
+                elif cor_id == 'SUB':
+                    sub_type_cnt[dsb_repair_type] += 1
+
+                if dsb_repair_type == 'HOM':
+                    indel_hom_cnt[hom[3]] += 1
+                elif dsb_repair_type == 'TEMP_INS':
+                    ref_len, qry_len = sv[5] - sv[4] + 1, sv[7] - sv[6] + 1
+                    temp_ins_seq_loc = hom[5]
+
+                    temp_ins_hom_cnt[hom[3]] += 1
+                    temp_ins_hom_cnt[hom[4]] += 1
+
+                    temp_ins_seq_loc_cnt[temp_ins_seq_loc] += 1
+                    temp_ins_seq_len_cnt[ref_len if temp_ins_seq_loc == 'REF' else qry_len] += 1
+                    temp_ins_del_len_cnt[qry_len if temp_ins_seq_loc == 'REF' else ref_len] += 1
+                elif dsb_repair_type == 'DIFF_LOCUS_DSBR':
+                    diff_locus_dsbr_hom_cnt[hom[3]] += 1
+                    diff_locus_dsbr_hom_cnt[hom[4]] += 1
+
                 bed_data_list.append((sv[3], sv[4] - 1, sv[5], hom[2], -1 if hom[3] is None else hom[3], -1 if hom[4] is None else hom[4], sv[0]))
                 output.append(sv + hom[2:])
             else:
@@ -617,7 +626,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
     # draw figure
     os.makedirs(os.path.join(dsbr_save, 'figure'), exist_ok=True)
     a_ej_baseline = draw_result(os.path.join(dsbr_save, 'figure'), pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt, sub_type_cnt,
-                                indel_hom_cnt, temp_ins_hom_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
+                                indel_hom_cnt, temp_ins_hom_cnt, temp_ins_seq_loc_cnt, temp_ins_seq_len_cnt, temp_ins_del_len_cnt, diff_locus_dsbr_hom_cnt, tot_sv_len, diff_locus_dsbr_analysis, ref_seq, merge_bed_df)
 
     for output_data in output_data_list:
         save_result(output_data, a_ej_baseline=a_ej_baseline, dsbr_save=dsbr_save)
