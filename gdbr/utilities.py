@@ -57,7 +57,7 @@ def gdbr_parser():
     subparsers = parser.add_subparsers(help='modes', dest='command')
     subparsers.required = True
 
-    parser_anl = subparsers.add_parser('analysis', help='find DSBR by corrected variant calling', add_help=False)
+    parser_anl = subparsers.add_parser('analysis', help='find DSBR by reference and query genomes', add_help=False)
     parser_pre = subparsers.add_parser('preprocess', help='preprocess the genome by scaffolding and have same chromosome name with reference', add_help=False)
     parser_cor = subparsers.add_parser('correct', help='correct the variant calling using BLAST', add_help=False)
     parser_ant = subparsers.add_parser('annotate', help='find DSBR by corrected variant calling', add_help=False)
