@@ -1,7 +1,7 @@
 GDBr : Genome identification tool for Double-strand Break Repair
 ================================================================
 
-`<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;">` GDBr (pronounced _Genome Debugger_) is tool that identify Double-strand Break Repair (DSBR) using genome and variant. GDBr goes through three processes to identify DSBR. First step is preprocess the genome using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm) and make sure they have same chromosome name with reference. Second step is correcting the variant using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi) and filtering the variant which have repeat bt [`TRF`](https://github.com/Benson-Genomics-Lab/TRF) and [`RepeatMasker`](https://github.com/rmhubley/RepeatMasker), then save a csv file. Last step is to segregate the corrected variants into the appropriate DSBRs.
+<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;"> GDBr (pronounced _Genome Debugger_) is tool that identify Double-strand Break Repair (DSBR) using genome and variant. GDBr goes through three processes to identify DSBR. First step is preprocess the genome using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm) and make sure they have same chromosome name with reference. Second step is correcting the variant using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi) and filtering the variant which have repeat bt [`TRF`](https://github.com/Benson-Genomics-Lab/TRF) and [`RepeatMasker`](https://github.com/rmhubley/RepeatMasker), then save a csv file. Last step is to segregate the corrected variants into the appropriate DSBRs.
 
 [![CI](https://github.com/Chemical118/GDBr/workflows/CI/badge.svg)](https://github.com/Chemical118/GDBr/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/Chemical118/GDBr/branch/master/graph/badge.svg?token=NA5V5H52M6)](https://codecov.io/gh/Chemical118/GDBr)
@@ -42,7 +42,7 @@ By using `RagTag` and `svim-asm`, `GDBr` preprocess data and return properly sca
 gdbr preprocess -r <reference.fa> -q <query1.fa query2.fa ...> -o prepro -t <number of threads>
 ```
 
-The preprocess step requires the use of a sorting program to do the scaffolding and variant calling, and even though they are allocated a lot of threads, they still don't use them all. An optimization approach is to distribute multiple queries to a small number of threads. However, this approach requires very high memory usage, so GDBr was developed to allow the user to freely choose this optimization by providing the `--low_memory ` option.
+The preprocess step requires the use of a sorting program to do the scaffolding and variant calling, and even though they are allocated a lot of threads, they still don't use them all. An optimization approach is to distribute multiple queries to a small number of threads. However, this approach requires very high memory usage, so GDBr was developed to allow the user to freely choose this optimization by providing the `--low_memory` option.
 
 #### Correct
 
