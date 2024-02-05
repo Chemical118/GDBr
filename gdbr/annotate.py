@@ -472,7 +472,7 @@ def save_result(output_tot_data, a_ej_baseline, dsbr_save):
                 if a_ej_baseline is None:
                     putative_mechanism = 'Not_determined'
                 else:
-                    putative_mechanism = 'a-EJ' if op[9] <= a_ej_baseline else 'SSA'
+                    putative_mechanism = 'TMEJ' if op[9] <= a_ej_baseline else 'SSA'
             else:
                 putative_mechanism = 'Not_determined'
         op.append(putative_mechanism)

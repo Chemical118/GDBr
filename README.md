@@ -1,7 +1,7 @@
 GDBr : Genome identification tool for Double-strand Break Repair
-================
+================================================================
 
-<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;"> GDBr (pronounced _Genome Debugger_) is tool that identify Double-strand Break Repair (DSBR) using genome and variant. GDBr goes through three processes to identify DSBR. First step is preprocess the genome using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm) and make sure they have same chromosome name with reference. Second step is correcting the variant using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi) and filtering the variant which have repeat bt [`TRF`](https://github.com/Benson-Genomics-Lab/TRF) and [`RepeatMasker`](https://github.com/rmhubley/RepeatMasker), then save a csv file. Last step is to segregate the corrected variants into the appropriate DSBRs.
+`<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;">` GDBr (pronounced _Genome Debugger_) is tool that identify Double-strand Break Repair (DSBR) using genome and variant. GDBr goes through three processes to identify DSBR. First step is preprocess the genome using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm) and make sure they have same chromosome name with reference. Second step is correcting the variant using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi) and filtering the variant which have repeat bt [`TRF`](https://github.com/Benson-Genomics-Lab/TRF) and [`RepeatMasker`](https://github.com/rmhubley/RepeatMasker), then save a csv file. Last step is to segregate the corrected variants into the appropriate DSBRs.
 
 [![CI](https://github.com/Chemical118/GDBr/workflows/CI/badge.svg)](https://github.com/Chemical118/GDBr/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/Chemical118/GDBr/branch/master/graph/badge.svg?token=NA5V5H52M6)](https://codecov.io/gh/Chemical118/GDBr)
@@ -12,13 +12,18 @@ You need only reference sequence and query sequences file to use `GDBr`.
 ### Install
 
 We strongly recommend using `conda` package manager to install `GDBr`.
-However, `rmblast` used by `RepeatMasker` are not compatible with `blast` at conda environment. So you may remove `blast` to insatall `GDBr`.
 
 ```sh
-conda remove blast
-conda install -c bioconda -c chemical118 -c conda-forge gdbr
+conda create -n GDBr -c conda-forge -c bioconda -c chemical118 gdbr
+conda activate GDBr
+gdbr --version
 ```
-
+Also, you can use [`mamba`](https://github.com/conda-forge/miniforge) package mamager to install `GDBr` quickly.
+```sh
+mamba create -n GDBr -c conda-forge -c bioconda -c chemical118 gdbr
+mamba activate GDBr
+gdbr --version
+```
 ### Quick Start
 
 ```sh
@@ -61,26 +66,26 @@ You can turn on different locus DSBR analysis by `--diff_locus_dsbr_analysis`, h
 
 `GDBr`'s final ouput is `<query basename>.GDBr.result.tsv`. This is simple description of the final output.
 
-| Field             | Description                                          |
-|-------------------|------------------------------------------------------|
-| ID                | GDBr.\<query order\>.\<variant order\>               |
-| CALL_TYPE         | Variant type : INS, DEL, etc                         |
-| SV_TYPE           | Corrected variant type : INS, DEL, SUB, etc          |
-| CHR               | variant chromosome                                   |
-| REF_START         | variant reference start location                     |
-| REF_END           | variant reference end location                       |
-| QRY_START         | variant query start location                         |
-| QRY_END           | variant query end location                           |
-| GDBR_TYPE       | GDBr variant type                                 |
-| HOM_LEN/HOM_START_LEN | INDEL : homology length / SUB : left homology length |
-| HOM_END_LEN           | SUB : right homology length                                |
-| TEMP_INS_SEQ_LOC  | templated insertion sequence location (REF or QRY)   |
-| DSBR_CHR          | different locus DSBR chromosome                      |
-| DSBR_START        | different locus DSBR start                           |
-| DSBR_END          | different locus DSBR end                             |
-| HOM_SEQ/HOM_START_SEQ | INDEL : homology sequence / SUB : left homology sequence|
-| HOM_END_SEQ           | SUB : right homology sequence                              |
-| PUTATIVE_MECHANISM    | GDBr DSB repair putative mechanism               |
+| Field                 | Description                                              |
+| --------------------- | -------------------------------------------------------- |
+| ID                    | GDBr.\<query order\>.\<variant order\>                   |
+| CALL_TYPE             | Variant type : INS, DEL, etc                             |
+| SV_TYPE               | Corrected variant type : INS, DEL, SUB, etc              |
+| CHR                   | variant chromosome                                       |
+| REF_START             | variant reference start location                         |
+| REF_END               | variant reference end location                           |
+| QRY_START             | variant query start location                             |
+| QRY_END               | variant query end location                               |
+| GDBR_TYPE             | GDBr variant type                                        |
+| HOM_LEN/HOM_START_LEN | INDEL : homology length / SUB : left homology length     |
+| HOM_END_LEN           | SUB : right homology length                              |
+| TEMP_INS_SEQ_LOC      | templated insertion sequence location (REF or QRY)       |
+| DSBR_CHR              | different locus DSBR chromosome                          |
+| DSBR_START            | different locus DSBR start                               |
+| DSBR_END              | different locus DSBR end                                 |
+| HOM_SEQ/HOM_START_SEQ | INDEL : homology sequence / SUB : left homology sequence |
+| HOM_END_SEQ           | SUB : right homology sequence                            |
+| PUTATIVE_MECHANISM    | GDBr DSB repair putative mechanism                       |
 
 ### Benckmarking
 

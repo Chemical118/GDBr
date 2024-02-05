@@ -753,7 +753,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         s = sns.histplot(x=indel_hom_cnt.keys(), weights=indel_hom_cnt.values(), binrange=(15, 200), binwidth=1, element='step', alpha=1, ax=ax)
         s.set(xlabel='micro/homology (bp)', ylabel='Variant count')
         if a_ej_baseline is not None:
-            ax.text(a_ej_baseline - 2, ax.get_ylim()[1] * 0.99, 'a-EJ',
+            ax.text(a_ej_baseline - 2, ax.get_ylim()[1] * 0.99, 'TMEJ',
                     color='red',
                     horizontalalignment='right',
                     verticalalignment='top')
@@ -833,10 +833,10 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         dsb_repair_type_list = []
         for gdbr_type, hom in zip(merge_bed_df['gdbr_type'], merge_bed_df['hom_l']):
             if gdbr_type == 'TEMP_INS':
-                dsb_repair_type_list.append('a-EJ')
+                dsb_repair_type_list.append('TMEJ')
             elif gdbr_type == 'HOM':
                 if hom <= a_ej_baseline:
-                    dsb_repair_type_list.append('a-EJ')
+                    dsb_repair_type_list.append('TMEJ')
                 else:
                     dsb_repair_type_list.append('SSA')
             else:
@@ -860,7 +860,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     ax = ax_array[0, 1]
     ax.axis('off')
-    ax.set_title('Variant relative frequency histogram')
+    ax.set_title('Varaiant normalized count histogram')
 
     hue, hue_order = 'Homology type', ['Homology', 'No homology']
     for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
@@ -877,7 +877,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
         ax = ax_array[i + 1, 1]
         sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
         ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
         if i == 0:
             sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
@@ -892,7 +892,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
     if a_ej_baseline is not None:
         fig, ax_array = plt.subplots(nrows=nrows + 1, ncols=ncols, figsize=(12 * ncols, 0.02 + 4 * nrows), gridspec_kw={"height_ratios" : [0.02] + [4] * nrows}, layout="constrained")
-        fig.suptitle('a-EJ - no homology chromosome distribution', fontweight='bold')
+        fig.suptitle('TMEJ - no homology chromosome distribution', fontweight='bold')
 
         ax = ax_array[0, 0]
         ax.axis('off')
@@ -900,9 +900,9 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
         ax = ax_array[0, 1]
         ax.axis('off')
-        ax.set_title('Variant relative frequency histogram')
+        ax.set_title('Varaiant normalized count histogram')
 
-        hue, hue_order = 'DSB repair type', ['a-EJ', 'No homology']
+        hue, hue_order = 'DSB repair type', ['TMEJ', 'No homology']
         for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
             ax = ax_array[i + 1, 0]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
@@ -917,7 +917,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
             ax = ax_array[i + 1, 1]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
             ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
@@ -928,10 +928,10 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                 y = line2d.get_ydata()
                 line2d.set_ydata(y / np.max(y))
 
-        save_fig(fig, savedir, 'result_chrom_a_ej_no_hom_distribution')
+        save_fig(fig, savedir, 'result_chrom_tmej_no_hom_distribution')
 
         fig, ax_array = plt.subplots(nrows=nrows + 1, ncols=ncols, figsize=(12 * ncols, 0.02 + 4 * nrows), gridspec_kw={"height_ratios" : [0.02] + [4] * nrows}, layout="constrained")
-        fig.suptitle('a-EJ - no homology - SSA chromosome distribution', fontweight='bold')
+        fig.suptitle('TMEJ - no homology - SSA chromosome distribution', fontweight='bold')
 
         ax = ax_array[0, 0]
         ax.axis('off')
@@ -939,9 +939,9 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
         ax = ax_array[0, 1]
         ax.axis('off')
-        ax.set_title('Variant relative frequency histogram')
+        ax.set_title('Varaiant normalized count histogram')
 
-        hue, hue_order = 'DSB repair type', ['a-EJ', 'No homology', 'SSA']
+        hue, hue_order = 'DSB repair type', ['TMEJ', 'No homology', 'SSA']
         for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
             ax = ax_array[i + 1, 0]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
@@ -956,7 +956,7 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
             ax = ax_array[i + 1, 1]
             sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Relative varaiant frequency')
+            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
             ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
             if i == 0:
                 sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
@@ -967,6 +967,6 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
                 y = line2d.get_ydata()
                 line2d.set_ydata(y / np.max(y))
 
-        save_fig(fig, savedir, 'result_chrom_a_ej_no_hom_ssa_distribution')
+        save_fig(fig, savedir, 'result_chrom_tmej_no_hom_ssa_distribution')
 
     return a_ej_baseline
