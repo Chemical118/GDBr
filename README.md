@@ -25,9 +25,36 @@ mamba activate GDBr
 gdbr --version
 ```
 ### Quick Start
+We require references and pangenomes made from long-read sequencing for accurate results. It is recommended that reference is assembled at the chromosome-level, and query should be assembled at the scaffold-level.
 
 ```sh
 gdbr analysis -r <reference.fa> -q <query1.fa query2.fa ...> -s <species of data> -t <number of threads>
+```
+
+### Example
+
+```sh
+mkdir gdbr_test
+cd gdbr_test
+
+# download reference
+wget https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz
+
+# download pangenome
+wget s3://human-pangenomics/working/HPRC_PLUS/HG002/assemblies/year1_f1_assembly_v2_genbank/HG002.paternal.f1_assembly_v2_genbank.fa.gz
+wget s3://human-pangenomics/working/HPRC_PLUS/HG005/assemblies/year1_f1_assembly_v2_genbank/HG005.paternal.f1_assembly_v2_genbank.fa.gz
+
+# decompress genome
+gzip -d chm13v2.0.fa.gz
+gzip -d HG002.paternal.f1_assembly_v2_genbank.fa.gz
+gzip -d HG005.paternal.f1_assembly_v2_genbank.fa.gz
+
+# install GDBr
+conda create -n GDBr -c conda-forge -c bioconda -c chemical118 gdbr
+conda activate GDBr
+
+# run GDBr
+gdbr analysis -r chm13v2.0.fa -q HG002.paternal.f1_assembly_v2_genbank.fa HG005.paternal.f1_assembly_v2_genbank.fa -s human -o gdbr_output -t 10
 ```
 
 ### Steps of GDBr

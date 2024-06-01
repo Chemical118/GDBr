@@ -1,5 +1,5 @@
 from gdbr.utilities import p_map, logprint, get_proper_thread, check_file_exist, check_unique_basename, remove_gdbr_postfix, safe_makedirs, check_query_chrom, draw_result
-from gdbr.correct import makeblastdb_from_location
+from gdbr.correct import makeblastdb_from_location, get_blast_single_result
 from collections import Counter
 from Bio.Blast import NCBIXML
 from functools import partial
@@ -483,7 +483,7 @@ def save_result(output_tot_data, a_ej_baseline, dsbr_save):
         tf.writerows(output_data)
 
 
-def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, workdir='data', dsbr_save='dsbr',
+def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_locus_dsbr_analysis=False, temp_indel_find_len=100, near_gap_find_len=5, user_gap_baseline=3, near_seq_kb_baseline=100.0, diff_locus_hom_baseline=3, twice_indel_temp_ins_baseline=100, workdir='data', dsbr_save='dsbr',
                   num_cpus=1, overwrite_output=False, trust_query=False):
     check_file_exist([[ref_loc], qry_loc_list, sv_loc_list], ['Reference', 'Query', 'Corrected variant'])
     check_unique_basename(qry_loc_list)
@@ -536,6 +536,7 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
     output_data_list = []
     for qry_ind, (qry_loc, sv_loc) in enumerate(zip(qry_loc_list, sv_loc_list)):
+        qry_seq = Fasta(qry_loc, build_index=False)
         qryworkdir = os.path.join(workdir, str(qry_ind) + '_gdbr')
         os.makedirs(qryworkdir, exist_ok=True)
 
@@ -569,13 +570,33 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
 
         output = []
         bed_data_list = []
-        for sv in sv_list:
+        for i, sv in enumerate(sv_list):
             pre_type_cnt[sv[1]] += 1
             cor_type_cnt[sv[2]] += 1
 
             sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
             if sv[2] in {'DEL', 'INS', 'SUB'}:
                 hom = list(hom_list.pop())
+
+                if i < len(sv_list) - 1:
+                    sv_next = sv_list[i + 1]
+                    if sv[2] == sv_next[2] and hom[2] == 'HOM' and hom[2] == hom_list[-1][2] and sv[3] == sv_next[3] and \
+                        0 < sv_next[4] - sv[5] < twice_indel_temp_ins_baseline and \
+                        0 < sv_next[6] - sv[7] < twice_indel_temp_ins_baseline:
+                        ref_gap = sv_next[4] - sv[5]
+                        qry_gap = sv_next[6] - sv[7]
+
+                        # gap length is very similar
+                        if max(ref_gap, qry_gap) * 0.95 <= min(ref_gap, qry_gap):
+                            temp_ins_blastn_result = get_blast_single_result(ref_seq[sv[5] : sv_next[4]], qry_seq[sv[6] : sv_next[7]], lambda t: True, task='blastn-short')
+                            if len(temp_ins_blastn_result) > 0:
+                                hom[2] == 'TEMP_INS'
+                                hom[4] = hom_list[-1][3]
+                                hom[5] = 'REF' if sv[2] == 'DEL' else 'QRY'
+                                hom[10] = hom_list[-1][9]
+
+                                hom_list[-1][3] = None
+                                hom_list[-1][9] = None
 
                 cor_id = hom[1]
                 dsb_repair_type = hom[2]

@@ -41,7 +41,7 @@ def get_blast_result(start_temp_seq, end_temp_seq, sv_find_len, sv_id, chrom, db
     return start_filter_result, end_filter_result
 
 
-def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryworkdir, filter_func):
+def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryworkdir, filter_func, task='megablast'):
     ref_temp_seq_loc = os.path.join(qryworkdir, f'sub_ref_{sv_id}.fasta')
     qry_temp_seq_loc = os.path.join(qryworkdir, f'sub_qry_{sv_id}.fasta')
 
@@ -53,7 +53,7 @@ def get_blast_single_result(ref_temp_seq, qry_temp_seq, sv_find_len, sv_id, qryw
         f.write('>' + qry_temp_seq.fancy_name + '\n')
         f.write(str(qry_temp_seq))
 
-    sub_result = subprocess.run(['blastn', '-subject', qry_temp_seq_loc, '-query', ref_temp_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
+    sub_result = subprocess.run(['blastn', '-task', task, '-subject', qry_temp_seq_loc, '-query', ref_temp_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
     sub_result_list =  [] if sub_result.stdout == '' else map(lambda t: list(map(eval, t.split(','))), sub_result.stdout[:-1].split('\n'))
     sub_filter_result = sorted(filter(lambda t: t[1] > sv_find_len * 0.90 and filter_func(t), sub_result_list), key=lambda t: t[8], reverse=True)
 

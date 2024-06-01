@@ -184,6 +184,11 @@ def gdbr_parser():
                                default=3,
                                help='minimum homology length to find different locus DSBR')
     
+    ao_parser_anl.add_argument('--twice_indel_temp_ins_baseline',
+                               type=int,
+                               default=100,
+                               help='maximum gap between two a-EJ indels to be recognized as templated insertion')
+    
     # preprocess_main
     # preprocess required arguments
     re_parser_pre = parser_pre.add_argument_group('required argument')
@@ -383,6 +388,11 @@ def gdbr_parser():
                                type=int,
                                default=3,
                                help='minimum homology length to find different locus DSBR')
+    
+    op_parser_ant.add_argument('--twice_indel_temp_ins_baseline',
+                               type=int,
+                               default=100,
+                               help='maximum gap between two a-EJ indels to be recognized as templated insertion')
 
     op_parser_ant.add_argument('--benchmark',
                                type=float,
