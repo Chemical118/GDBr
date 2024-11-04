@@ -1,7 +1,14 @@
-GDBr : Genome identification tool for Double-strand Break Repair
+GDBr : Genomic signature interpretation tool for DNA double-strand break repair mechanism
 ================================================================
 
-<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;"> GDBr (pronounced _Genome Debugger_) is tool that identify Double-strand Break Repair (DSBR) using genome and variant. GDBr goes through three processes to identify DSBR. First step is preprocess the genome using [`RagTag`](https://github.com/malonge/RagTag) and [`svim-asm`](https://github.com/eldariont/svim-asm) and make sure they have same chromosome name with reference. Second step is correcting the variant using [`BLAST`](https://blast.ncbi.nlm.nih.gov/Blast.cgi) and filtering the variant which have repeat bt [`TRF`](https://github.com/Benson-Genomics-Lab/TRF) and [`RepeatMasker`](https://github.com/rmhubley/RepeatMasker), then save a csv file. Last step is to segregate the corrected variants into the appropriate DSBRs.
+<img src="logo/gdbr.svg" alt="GDBr logo" align="right" height="160" style="display: inline-block;"> GDBr (pronounced "Genome Debugger") is a tool designed to annotate genetic variants with their underlying double-strand break (DSB) repair mechanisms using long-read-based genome assemblies. The annotation process in GDBr consists of three key steps:  
+
+#### Preprocessing Step
+In this initial step, contig-level genome assemblies (the Query) are scaffolded into chromosome-level assemblies using RagTag, followed by variant calling using SVIM-asm.  
+#### Correction Step
+During this step, each genetic variant is searched for in both the reference and query genomes using BLAST. Repetitive variants are filtered out using TRF and RepeatMasker. Additionally, micro/homology signatures of variants are detected at this stage.  
+#### Annotation Step
+In the final step, micro/homology distributions are separated, and potential DSB repair mechanisms are annotated for each variant.  
 
 [![CI](https://github.com/Chemical118/GDBr/workflows/CI/badge.svg)](https://github.com/Chemical118/GDBr/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/Chemical118/GDBr/branch/master/graph/badge.svg?token=NA5V5H52M6)](https://codecov.io/gh/Chemical118/GDBr)
@@ -25,7 +32,7 @@ mamba activate GDBr
 gdbr --version
 ```
 ### Quick Start
-We require references and pangenomes made from long-read sequencing for accurate results. It is recommended that reference is assembled at the chromosome-level, and query should be assembled at the scaffold-level.
+For achieving accurate results , we require references and pangenomes generated from long-read sequencing. It is recommended that reference is assembled at the chromosome-level, and query should be assembled at the scaffold-level. Also, SSD is not necessary to run GDBr, as it only improves the processing speed by approximately 3%.
 
 ```sh
 gdbr analysis -r <reference.fa> -q <query1.fa query2.fa ...> -s <species of data> -t <number of threads>
@@ -59,7 +66,7 @@ gdbr analysis -r chm13v2.0.fa -q HG002.paternal.f1_assembly_v2_genbank.fa HG005.
 
 ### Steps of GDBr
 
-The above command executes the following three processes simultaneously. If you want to redo some of the processes, you can manually run the command below.
+The above command executes the following three processes concurrently. If you want to redo some of the processes, you can manually run the command below.
 
 #### Preprocess
 
@@ -69,7 +76,7 @@ By using `RagTag` and `svim-asm`, `GDBr` preprocess data and return properly sca
 gdbr preprocess -r <reference.fa> -q <query1.fa query2.fa ...> -o prepro -t <number of threads>
 ```
 
-The preprocess step requires the use of a sorting program to do the scaffolding and variant calling, and even though they are allocated a lot of threads, they still don't use them all. An optimization approach is to distribute multiple queries to a small number of threads. However, this approach requires very high memory usage, so GDBr was developed to allow the user to freely choose this optimization by providing the `--low_memory` option.
+The preprocess step, utilizing a sorting program for scaffolding and variant calling, often underutilizes allocated threads. To address this, an optimization approach distributes multiple queries across a reduced number of threads, enhancing efficiency but significantly increasing memory usage. In response, GDBr offers the `--low_memory` option , providing users with the flexibility to selectively apply this optimization based on their specific resource constraints.
 
 #### Correct
 
@@ -116,7 +123,7 @@ You can turn on different locus DSBR analysis by `--diff_locus_dsbr_analysis`, h
 
 ### Benckmarking
 
-You can benchmark any command in GDBr with the `--benchmark` option by `GNU time` and `psutil`. It provides user time, system time, average CPU usage, multiprocessing efficiency, maximum RAM usage and wall clock time.
+You can benchmark any command in GDBr with the `--benchmark` option by `GNU time` and `psutil`. It provides user time, system time, average CPU usage, multiprocessing efficiency, maximum RAM usage and wall clock time. 
 
 ```
 ...

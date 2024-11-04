@@ -661,14 +661,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax1, ax2 = ax[0, 0], ax[1, 0]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Deletion variant DSBR estimation count')
+    ax1.set_title('Deletion variant HR signature count')
     ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
-    ax2.set_title('Deletion variant DSBR estimation frequency')
+    ax2.set_title('Deletion variant HR signature frequency')
     ax2.set_xlabel('Frequency (%)')
     ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
 
@@ -678,14 +678,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Insertion variant DSBR estimation count')
+    ax1.set_title('Insertion variant HR signature count')
     ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
-    ax2.set_title('Insertion variant DSBR estimation frequency')
+    ax2.set_title('Insertion variant HR signature frequency')
     ax2.set_xlabel('Frequency (%)')
     ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
 
@@ -695,14 +695,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     target_data = [(k, cnt[k] if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Indel variant DSBR estimation count')
+    ax1.set_title('Indel variant HR signature count')
     ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
-    ax2.set_title('Indel variant DSBR estimation frequency')
+    ax2.set_title('Indel variant HR signature frequency')
     ax2.set_xlabel('Frequency (%)')
     ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
     save_fig(fig, savedir, 'result_indel_classification')
@@ -714,14 +714,14 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.4, 9.6))
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax1, width=width)
     ax1.axes.get_yaxis().set_visible(False)
-    ax1.set_title('Substitution variant DSBR estimation count')
+    ax1.set_title('Substitution variant HR signature count')
     ax1.set_xlabel('Count')
     ax1.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({val} / {sum(cnt.values())})' for tar, val in target_data])
     ax1.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
     target_data = [(k, cnt[k] / sum(cnt.values()) * 100 if k in cnt else 0) for k in target_list]
     pd.DataFrame(dict(target_data), index=['']).plot.barh(color=code_palette_dict, stacked=True, ax=ax2, width=width)
     ax2.axes.get_yaxis().set_visible(False)
-    ax2.set_title('Substitution variant DSBR estimation frequency')
+    ax2.set_title('Substitution variant HR signature frequency')
     ax2.set_xlabel('Frequency (%)')
     ax2.legend(loc=2, prop={'size': legend_fontsize}, labels=[f'{tar} ({saferound(val, 1)}%)'for tar, val in target_data])
     save_fig(fig, savedir, 'result_sub_classification')
@@ -872,31 +872,34 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
     ax.axis('off')
     ax.set_title('Varaiant normalized count histogram')
 
+    first_flag = True
     hue, hue_order = 'Homology type', ['Homology', 'No homology']
     for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
-        ax = ax_array[i + 1, 0]
-        sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), xlabel='Variant location (bp)', ylabel='Variant count')
-        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-        if i == 0:
-            sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-        else:
-            ax.get_legend().remove()
-        
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        if len(tdf) > 1:
+            ax = ax_array[i + 1, 0]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), xlabel='Variant location (bp)', ylabel='Variant count')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+            if first_flag:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+            else:
+                ax.get_legend().remove()
+            
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-        ax = ax_array[i + 1, 1]
-        sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-        ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
-        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-        if i == 0:
-            sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-        else:
-            ax.get_legend().remove()
+            ax = ax_array[i + 1, 1]
+            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+            ax.set(title=chrom, xlim=(0, len(ref_seq[chrom])), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
+            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+            if first_flag:
+                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+                first_flag = False
+            else:
+                ax.get_legend().remove()
 
-        for line2d in ax.lines:
-            y = line2d.get_ydata()
-            line2d.set_ydata(y / np.max(y))
+            for line2d in ax.lines:
+                y = line2d.get_ydata()
+                line2d.set_ydata(y / np.max(y))
 
     save_fig(fig, savedir, 'result_chrom_hom_no_hom_distribution')
 
@@ -912,31 +915,34 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
         ax.axis('off')
         ax.set_title('Varaiant normalized count histogram')
 
+        first_flag = True
         hue, hue_order = 'DSB repair type', ['TMEJ', 'No homology']
         for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
-            ax = ax_array[i + 1, 0]
-            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
-            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-            if i == 0:
-                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-            else:
-                ax.get_legend().remove()
-            
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            if len(tdf) > 1:
+                ax = ax_array[i + 1, 0]
+                sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+                ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+                ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+                if first_flag:
+                    sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+                else:
+                    ax.get_legend().remove()
+                
+                ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-            ax = ax_array[i + 1, 1]
-            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
-            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-            if i == 0:
-                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-            else:
-                ax.get_legend().remove()
+                ax = ax_array[i + 1, 1]
+                sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+                ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
+                ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+                if first_flag:
+                    sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+                    first_flag = False
+                else:
+                    ax.get_legend().remove()
 
-            for line2d in ax.lines:
-                y = line2d.get_ydata()
-                line2d.set_ydata(y / np.max(y))
+                for line2d in ax.lines:
+                    y = line2d.get_ydata()
+                    line2d.set_ydata(y / np.max(y))
 
         save_fig(fig, savedir, 'result_chrom_tmej_no_hom_distribution')
 
@@ -953,29 +959,30 @@ def draw_result(savedir, pre_type_cnt, cor_type_cnt, del_type_cnt, ins_type_cnt,
 
         hue, hue_order = 'DSB repair type', ['TMEJ', 'No homology', 'SSA']
         for i, (tdf, chrom, chrom_len) in enumerate(chr_res_df_data):
-            ax = ax_array[i + 1, 0]
-            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
-            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-            if i == 0:
-                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-            else:
-                ax.get_legend().remove()
-            
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            if len(tdf) > 1:
+                ax = ax_array[i + 1, 0]
+                sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+                ax.set(title=chrom, xlim=(0, chrom_len), xlabel='Variant location (bp)', ylabel='Variant count')
+                ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+                if i == 0:
+                    sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+                else:
+                    ax.get_legend().remove()
+                
+                ax.yaxis.set_major_locator(MaxNLocator(integer=True))
 
-            ax = ax_array[i + 1, 1]
-            sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
-            ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
-            ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-            if i == 0:
-                sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
-            else:
-                ax.get_legend().remove()
+                ax = ax_array[i + 1, 1]
+                sns.histplot(data=tdf, x='sv_loc', hue=hue, binwidth=binwidth, ax=ax, element="step", fill=False, hue_order=hue_order, linewidth=linewidth, alpha=1)
+                ax.set(title=chrom, xlim=(0, chrom_len), ylim=(0, 1.05), xlabel='Variant location (bp)', ylabel='Varaiant normalized count')
+                ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+                if i == 0:
+                    sns.move_legend(ax, loc='lower right', bbox_to_anchor=(1, 1))
+                else:
+                    ax.get_legend().remove()
 
-            for line2d in ax.lines:
-                y = line2d.get_ydata()
-                line2d.set_ydata(y / np.max(y))
+                for line2d in ax.lines:
+                    y = line2d.get_ydata()
+                    line2d.set_ydata(y / np.max(y))
 
         save_fig(fig, savedir, 'result_chrom_tmej_no_hom_ssa_distribution')
 
