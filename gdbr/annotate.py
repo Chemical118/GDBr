@@ -59,8 +59,7 @@ def get_one_way_homology(ref_part_seq, qry_part_seq, ref_hom_find_len, qry_hom_f
             f.write('>' + temp_qry_part_seq.fancy_name + '\n')
             f.write(str(temp_qry_part_seq))
         
-        blast_result = subprocess.run(['blastn', '-task', 'blastn-short', '-subject', ref_part_seq_loc, '-query', temp_qry_part_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
-        # blast_result = subprocess.run(['blastn', '-subject', ref_part_seq_loc, '-query', temp_qry_part_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
+        blast_result = subprocess.run(['blastn', '-subject', ref_part_seq_loc, '-query', temp_qry_part_seq_loc, '-strand', 'plus', '-outfmt', '10 ' + ' '.join(blastn_fmt)], capture_output=True, text=True)
         blast_result_list =  [] if blast_result.stdout == '' else map(blast_output_to_list, blast_result.stdout[:-1].split('\n'))
         blast_filter_result = sorted(filter(lambda t: t[1] > ref_hom_find_len * 0.90 and t[6] < 0.2 * qry_hom_find_len and t[7] > qry_hom_find_len and t[4] < 0.2 * ref_hom_find_len and t[5] > ref_hom_find_len and t[8] > ref_bitscore, blast_result_list), key=lambda t: t[8])
 
@@ -578,31 +577,6 @@ def annotate_main(ref_loc, qry_loc_list, sv_loc_list, hom_find_len=2000, diff_lo
             sv = [f'GDBr.{qry_ind}.{sv[0]}'] + sv[1:]
             if sv[2] in {'DEL', 'INS', 'SUB'}:
                 hom = list(hom_list.pop())
-
-                # Near a-EJ to templated insertion annotate
-                # if i < len(sv_list) - 1:
-                #     sv_next = sv_list[i + 1]
-                #     if sv[2] == sv_next[2] and hom[2] == 'HOM' and hom[2] == hom_list[-1][2] and sv[3] == sv_next[3] and \
-                #         0 < sv_next[4] - sv[5] < twice_indel_temp_ins_baseline and \
-                #         0 < sv_next[6] - sv[7] < twice_indel_temp_ins_baseline:
-                #         ref_gap = sv_next[4] - sv[5]
-                #         qry_gap = sv_next[6] - sv[7]
-                        
-                        # sv_id, cor_id, dsb_repair_type, left_hom, right_hom, temp_ins_seq_loc, dsbr_chrom, dsbr_start, dsbr_end, left_hom_seq, right_hom_seq
-                        # 0      1       2                3         4          5                 6           7           8         9             10
-                        # gap length is very similar
-                        # if max(ref_gap, qry_gap) * 0.95 <= min(ref_gap, qry_gap):
-                        #     temp_ins_blastn_result = get_blast_single_result(ref_seq[sv[3]][sv[5] : sv_next[4]], qry_seq[sv[3]][sv[6] : sv_next[7]], min(ref_gap, qry_gap), f'dd_indel_hom_{sv[0]}', qryworkdir, lambda t: True, task='blastn-short')
-                        #     if len(temp_ins_blastn_result) > 0:
-                        #         hom[2] = 'TEMP_INS'
-                        #         hom[4] = hom_list[-1][3]
-                        #         hom[5] = 'REF' if sv[2] == 'DEL' else 'QRY'
-                        #         hom[10] = hom_list[-1][9]
-
-                        #         hom_last_list = list(hom_list[-1])
-                        #         hom_last_list[2] = 'NO_HOM'
-                        #         hom_last_list[3] = None
-                        #         hom_last_list[9] = None
 
                 cor_id = hom[1]
                 dsb_repair_type = hom[2]
